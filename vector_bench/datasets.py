@@ -2,10 +2,11 @@
 
 from types import ModuleType
 
-from cheat_at_search import msmarco_data
+from cheat_at_search import doug_blog_data, msmarco_data
 
 
 DATASETS: dict[str, ModuleType] = {
+    "dougs_blog_data": doug_blog_data,
     "msmarco": msmarco_data,
 }
 

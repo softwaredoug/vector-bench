@@ -1,51 +1,25 @@
-from vector_bench import main
+import csv
+
+from vector_bench.datasets import get_dataset
+from vector_bench.main import main
 
 
-def test_cli_embeds_selected_dataset_with_default_model(monkeypatch):
-    calls = {}
+def test_cli_writes_dougs_blog_data_embeddings_for_student_tool(tmp_path):
+    output_path = tmp_path / "embeddings.csv"
 
-    def fake_get_dataset(name):
-        calls["dataset"] = name
-        return "corpus", "judgments"
-
-    def fake_embed_corpus(corpus, model_name):
-        calls["corpus"] = corpus
-        calls["model_name"] = model_name
-        return "embeddings", "model"
-
-    monkeypatch.setattr(main, "get_dataset", fake_get_dataset)
-    monkeypatch.setattr(main, "embed_corpus", fake_embed_corpus)
-
-    result = main.main(["--dataset", "msmarco"])
-
-    assert result == ("corpus", "judgments", "embeddings", "model")
-    assert calls == {
-        "dataset": "msmarco",
-        "corpus": "corpus",
-        "model_name": "sentence-transformers/all-MiniLM-L6-v2",
-    }
-
-
-def test_embed_corpus_builds_title_description_passages(monkeypatch):
-    captured = {}
-
-    def fake_load_or_create_embeddings(corpus, passage_fn, **kwargs):
-        captured["passages"] = [
-            passage_fn({"title": "Title", "description": "Description"}),
-            passage_fn({"title": "", "description": "Description only"}),
+    main(
+        [
+            "--dataset",
+            "dougs_blog_data",
+            "--embeddings-file",
+            str(output_path),
         ]
-        captured["kwargs"] = kwargs
-        return "embeddings", "model"
-
-    import vector_bench.embeddings as embeddings
-
-    monkeypatch.setattr(
-        embeddings,
-        "load_or_create_embeddings",
-        fake_load_or_create_embeddings,
     )
 
-    result = embeddings.embed_corpus("corpus", model_name="test-model")
+    corpus, _ = get_dataset("dougs_blog_data")
+    with output_path.open(newline="") as output_file:
+        rows = list(csv.reader(output_file))
 
-    assert result == ("embeddings", "model")
-    assert captured["passages"] == ["Title\n\nDescription", "Description only"]
+    assert len(rows) == len(corpus)
+    assert rows[0][0] == str(corpus.iloc[0]["doc_id"])
+    assert len(rows[0]) > 1
