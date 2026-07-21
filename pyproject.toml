@@ -11,6 +11,11 @@ dependencies = [
 [project.scripts]
 vector-bench = "vector_bench.main:main"
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
