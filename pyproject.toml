@@ -10,6 +10,7 @@ dependencies = [
 
 [project.scripts]
 vector-bench = "vector_bench.main:main"
+naive-vector-search = "vector_bench.naive_search:main"
 
 [dependency-groups]
 dev = [
