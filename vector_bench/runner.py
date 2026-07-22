@@ -1,0 +1,117 @@
+"""Launch and supervise a student vector search process."""
+
+from __future__ import annotations
+
+import selectors
+import socket
+import subprocess
+import time
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+
+
+def _find_free_port() -> int:
+    """Ask the operating system for an available local TCP port."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+@dataclass
+class StudentProcess:
+    """A student process that has completed indexing and is ready to query."""
+
+    process: subprocess.Popen[str]
+    port: int
+
+    def stop(self) -> None:
+        """Terminate the student process and avoid leaving a child behind."""
+        if self.process.poll() is not None:
+            return
+        self.process.terminate()
+        try:
+            self.process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait(timeout=5)
+
+    def __enter__(self) -> "StudentProcess":
+        return self
+
+    def __exit__(self, *_args) -> None:
+        self.stop()
+
+
+def launch_student(
+    command: Sequence[str],
+    index_path: Path,
+    port: int | None = None,
+    ready_timeout: float = 30,
+) -> StudentProcess:
+    """Launch a student command and wait until it prints ``READY``."""
+    if not command:
+        raise ValueError("A student command is required after --")
+
+    selected_port = port or _find_free_port()
+    full_command = [
+        *command,
+        "--index",
+        str(index_path),
+        "--port",
+        str(selected_port),
+    ]
+    process = subprocess.Popen(
+        full_command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+
+    try:
+        _wait_for_ready(process, ready_timeout)
+    except Exception:
+        _stop_process(process)
+        raise
+    return StudentProcess(process, selected_port)
+
+
+def _wait_for_ready(process: subprocess.Popen[str], timeout: float) -> None:
+    """Read child output until READY or raise a useful startup error."""
+    if process.stdout is None:
+        raise RuntimeError("Student process stdout is unavailable")
+
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ)
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Student process did not print READY in time")
+            if not selector.select(remaining):
+                raise TimeoutError("Student process did not print READY in time")
+            line = process.stdout.readline()
+            if not line:
+                error = process.stderr.read() if process.stderr else ""
+                raise RuntimeError(
+                    "Student process exited before READY"
+                    + (f": {error.strip()}" if error.strip() else "")
+                )
+            if line.strip() == "READY":
+                return
+    finally:
+        selector.close()
+
+
+def _stop_process(process: subprocess.Popen[str]) -> None:
+    """Stop a process during failed startup."""
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)

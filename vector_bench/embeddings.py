@@ -1,11 +1,19 @@
 """Create embeddings for vector-bench corpora."""
 
+from __future__ import annotations
+
+import hashlib
+import json
+import os
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
+import numpy as np
 from cheat_at_search.embeddings import (
     DEFAULT_CHUNK_SIZE,
     DEFAULT_MODEL_NAME,
+    load_model,
     load_or_create_embeddings,
 )
 
@@ -22,12 +30,15 @@ def passage_fn(row: Any) -> str:
 
 def embed_corpus(
     corpus: Any,
+    judgments: Any,
+    dataset_name: str,
     model_name: str = DEFAULT_MODEL_NAME,
     device: str | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
+    top_k: int = 1000,
     show_progress: bool = True,
-) -> list[str]:
-    """Create or load embeddings and return student-tool CSV lines."""
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Create embeddings, ground truth, and student-tool CSV lines."""
     embeddings, _model = load_or_create_embeddings(
         corpus,
         passage_fn=passage_fn,
@@ -36,7 +47,157 @@ def embed_corpus(
         chunk_size=chunk_size,
         show_progress=show_progress,
     )
-    return list(embedding_csv_lines(corpus, embeddings))
+    rankings = ground_truth(
+        corpus,
+        judgments,
+        embeddings,
+        dataset_name=dataset_name,
+        model_name=model_name,
+        device=device,
+        top_k=top_k,
+        show_progress=show_progress,
+    )
+    return rankings, list(embedding_csv_lines(corpus, embeddings))
+
+
+def ground_truth(
+    corpus: Any,
+    judgments: Any,
+    corpus_embeddings: np.ndarray,
+    dataset_name: str,
+    model_name: str = DEFAULT_MODEL_NAME,
+    device: str | None = None,
+    top_k: int = 1000,
+    show_progress: bool = True,
+) -> dict[str, list[str]]:
+    """Return or create cosine-similarity rankings for judged queries."""
+    if top_k <= 0:
+        raise ValueError("top_k must be greater than zero")
+    if len(corpus) != len(corpus_embeddings):
+        raise ValueError("Corpus and embeddings must contain the same number of rows")
+
+    queries = judgments[["query_id", "query"]].drop_duplicates("query_id")
+    signature = _ground_truth_signature(
+        corpus,
+        queries,
+        dataset_name,
+        model_name,
+        top_k,
+        corpus_embeddings.shape[1],
+    )
+    cache_path = _cache_dir() / f"ground_truth_{signature}.json"
+    if cache_path.exists():
+        with cache_path.open(encoding="utf-8") as cache_file:
+            cached = json.load(cache_file)
+        return cached["rankings"]
+
+    query_embeddings = _query_embeddings(
+        queries,
+        signature,
+        model_name=model_name,
+        device=device,
+        show_progress=show_progress,
+    )
+    document_norms = np.linalg.norm(corpus_embeddings, axis=1)
+    query_norms = np.linalg.norm(query_embeddings, axis=1)
+    if np.any(document_norms == 0) or np.any(query_norms == 0):
+        raise ValueError("Cosine similarity does not support zero-length vectors")
+
+    normalized_documents = corpus_embeddings / document_norms[:, np.newaxis]
+    normalized_queries = query_embeddings / query_norms[:, np.newaxis]
+    scores = normalized_queries @ normalized_documents.T
+    ranked_indexes = np.argsort(-scores, axis=1, kind="stable")
+    ranked_indexes = ranked_indexes[:, : min(top_k, len(corpus))]
+    doc_ids = [str(doc_id) for doc_id in corpus["doc_id"]]
+    rankings = {
+        str(query_id): [doc_ids[index] for index in indexes]
+        for query_id, indexes in zip(queries["query_id"], ranked_indexes)
+    }
+    _write_ground_truth(cache_path, dataset_name, model_name, top_k, rankings)
+    return rankings
+
+
+def _cache_dir() -> Path:
+    """Return the vector-bench cache directory, creating it when needed."""
+    configured_path = os.environ.get("VECTOR_BENCH_DATA_DIR")
+    cache_path = (
+        Path(configured_path)
+        if configured_path
+        else Path.home() / ".cache" / "vector-bench"
+    )
+    cache_path.mkdir(parents=True, exist_ok=True)
+    return cache_path
+
+
+def _ground_truth_signature(
+    corpus: Any,
+    queries: Any,
+    dataset_name: str,
+    model_name: str,
+    top_k: int,
+    embedding_dimension: int,
+) -> str:
+    """Create a cache key from all inputs that affect the rankings."""
+    payload = {
+        "dataset": dataset_name,
+        "model": model_name,
+        "top_k": top_k,
+        "embedding_dimension": embedding_dimension,
+        "doc_ids": [str(doc_id) for doc_id in corpus["doc_id"]],
+        "queries": [
+            [str(query_id), str(query)]
+            for query_id, query in zip(queries["query_id"], queries["query"])
+        ],
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _query_embeddings(
+    queries: Any,
+    signature: str,
+    model_name: str,
+    device: str | None,
+    show_progress: bool,
+) -> np.ndarray:
+    """Load cached query vectors or encode the unique judged queries."""
+    cache_path = _cache_dir() / f"query_embeddings_{signature}.npy"
+    if cache_path.exists():
+        return np.load(cache_path)
+
+    model = load_model(model_name, device=device)
+    query_texts = [str(query) for query in queries["query"]]
+    embeddings = model.encode(
+        query_texts,
+        show_progress_bar=show_progress,
+        convert_to_numpy=True,
+    )
+    embeddings = np.asarray(embeddings)
+    np.save(cache_path, embeddings)
+    return embeddings
+
+
+def _write_ground_truth(
+    cache_path: Path,
+    dataset_name: str,
+    model_name: str,
+    top_k: int,
+    rankings: dict[str, list[str]],
+) -> None:
+    """Write rankings atomically so interrupted runs do not corrupt caches."""
+    payload = {
+        "metadata": {
+            "dataset": dataset_name,
+            "model": model_name,
+            "top_k": top_k,
+        },
+        "rankings": rankings,
+    }
+    temporary_path = cache_path.with_suffix(".tmp")
+    with temporary_path.open("w", encoding="utf-8") as cache_file:
+        json.dump(payload, cache_file)
+    temporary_path.replace(cache_path)
 
 
 def embedding_csv_lines(corpus: Any, embeddings: Any) -> Iterator[str]:
