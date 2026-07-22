@@ -8,6 +8,7 @@ project README.
 
 import argparse
 import csv
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import StringIO
 from pathlib import Path
@@ -21,11 +22,63 @@ import numpy as np
 NUM_DIMENSIONS = 20
 
 
-def load_index(index_path: Path) -> tuple[list[str], np.ndarray]:
-    """Read document IDs and the first 20 vector dimensions from a CSV file."""
+@dataclass
+class VectorIndex:
+    """The in-memory document IDs and vectors used by the search server."""
+
+    doc_ids: list[str]
+    doc_vectors: np.ndarray
+
+    @staticmethod
+    def index(doc_ids: list[str], doc_vectors: np.ndarray) -> "VectorIndex":
+        """Build an index from original document vectors.
+
+        Students should customize this static method when replacing the
+        baseline index. The document IDs must remain aligned with the rows in
+        the stored vector array.
+        """
+        if len(doc_ids) != len(doc_vectors):
+            raise ValueError("Document IDs and vectors must have the same length")
+        if doc_vectors.ndim != 2 or doc_vectors.shape[1] < NUM_DIMENSIONS:
+            raise ValueError(
+                f"Document vectors must have at least {NUM_DIMENSIONS} dimensions"
+            )
+
+        # Keeping only a prefix makes this intentionally naive implementation
+        # small and gives students a clear place to try a better index later.
+        return VectorIndex(
+            doc_ids,
+            np.asarray(doc_vectors[:, :NUM_DIMENSIONS], dtype=np.float32),
+        )
+
+    def query(self, query_vector: np.ndarray, top_k: int | None = None):
+        """Return ranked document IDs for one query vector.
+
+        Students should customize this method when replacing the baseline
+        search. The baseline uses a brute-force dot product against every
+        indexed document. ``rank`` starts at one for the HTTP response.
+        """
+        if len(query_vector) < NUM_DIMENSIONS:
+            raise ValueError(
+                f"Query vector must contain at least {NUM_DIMENSIONS} dimensions"
+            )
+
+        # Both arrays have already been limited to 20 dimensions. A dot
+        # product gives one similarity score for every indexed document.
+        scores = self.doc_vectors @ query_vector[:NUM_DIMENSIONS]
+        ranked_indexes = np.argsort(-scores, kind="stable")
+        if top_k is not None:
+            ranked_indexes = ranked_indexes[:top_k]
+        return [
+            (rank, self.doc_ids[int(document_index)])
+            for rank, document_index in enumerate(ranked_indexes, start=1)
+        ]
+
+
+def load_index(index_path: Path) -> VectorIndex:
+    """Read the embeddings CSV and build the student index."""
     doc_ids = []
     vectors = []
-
     with index_path.open(newline="") as index_file:
         for row_number, row in enumerate(csv.reader(index_file), start=1):
             if len(row) < NUM_DIMENSIONS + 1:
@@ -34,15 +87,14 @@ def load_index(index_path: Path) -> tuple[list[str], np.ndarray]:
                     f"at least {NUM_DIMENSIONS} dimensions"
                 )
             doc_ids.append(row[0])
-            vectors.append([float(value) for value in row[1 : NUM_DIMENSIONS + 1]])
+            vectors.append([float(value) for value in row[1:]])
 
     if not vectors:
         raise ValueError("Index must contain at least one document")
+    return VectorIndex.index(doc_ids, np.asarray(vectors, dtype=np.float32))
 
-    return doc_ids, np.asarray(vectors, dtype=np.float32)
 
-
-def make_query_handler(doc_ids: list[str], document_vectors: np.ndarray):
+def make_query_handler(vector_index: VectorIndex):
     """Create an HTTP handler with access to the in-memory document index."""
 
     class QueryHandler(BaseHTTPRequestHandler):
@@ -70,15 +122,10 @@ def make_query_handler(doc_ids: list[str], document_vectors: np.ndarray):
                 self.send_error(400, str(error))
                 return
 
-            # Both arrays have already been limited to 20 dimensions. A dot
-            # product gives one similarity score for every indexed document.
-            scores = document_vectors @ query_vector[:NUM_DIMENSIONS]
-            ranked_indexes = np.argsort(-scores, kind="stable")
-
             output = StringIO()
             writer = csv.writer(output, lineterminator="\n")
-            for rank, document_index in enumerate(ranked_indexes, start=1):
-                writer.writerow([rank, query_id, doc_ids[document_index]])
+            for rank, doc_id in vector_index.query(query_vector):
+                writer.writerow([rank, query_id, doc_id])
 
             response = output.getvalue().encode()
             self.send_response(200)
@@ -100,8 +147,8 @@ def main(argv=None) -> None:
     parser.add_argument("--port", type=int, required=True)
     args = parser.parse_args(argv)
 
-    doc_ids, document_vectors = load_index(args.index)
-    handler = make_query_handler(doc_ids, document_vectors)
+    vector_index = load_index(args.index)
+    handler = make_query_handler(vector_index)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
 
     try:
