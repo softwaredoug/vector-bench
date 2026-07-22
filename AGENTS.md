@@ -118,7 +118,9 @@ embeddings CSV file, and the port to listen on. It will be expected to index the
 
 Once READY occurs on stdout, the parent process then continues.
 
-## Searching and computing recall
+## Searching and computing recall and latency
+
+Search is its own module, search, that will issue searches to a ready app and compute recall
 
 We search by POST'ing in the body to a query endpoint expected.
 
@@ -126,6 +128,24 @@ The POST body will be form-encoded, with the following params:
 
 http://localhost:<port>/query
 query_id=<query_id>&vector=<comma_seperated_vector>
+
+Once we search per query, we can compute recall@N by comparing the returned doc_ids to the ground truth doc_ids.
+
+The proportion out of the retrieved N doc_ids out of true top N is the recall@N score.
+
+We track latency as the time between sending the POST and receiving the response using perf_counter
+
+Output to stdout in the format:
+
+query_id,latency,recall@N
+
+With final line average:
+
+,average_latency,average_recall@N
+
+## Terminating and cleanup
+
+Once the search is complete, we terminate the student command line tool and cleanup any temporary files.
 
 
 # Naive vector search application
