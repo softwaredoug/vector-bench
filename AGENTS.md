@@ -154,7 +154,7 @@ For testing, we should create a simple, naive search application that uses brute
 
 This application should
 
-- Use only the first 20 dimensions provided
+- Use only the first N=20 dimensions provided
 - Store a numpy array in memory
 - Use dot product between the query-document when querying
 
@@ -163,3 +163,5 @@ It should follow the different command line interface requirements as specified 
 It also should act as a scaffold for the students during their training.
 
 When testing this e2e, you can interact with this application directly. No need to call main.
+
+Make the N dimensions used configurable via a command line param, this lets us test the student application with different dimensions and see if incleasing dimensions increases recall.

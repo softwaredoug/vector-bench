@@ -19,7 +19,7 @@ import numpy as np
 
 # The benchmark provides full-size embeddings, but this demo intentionally
 # uses only a small prefix so the search implementation stays straightforward.
-NUM_DIMENSIONS = 20
+DEFAULT_DIMENSIONS = 20
 
 
 @dataclass
@@ -28,27 +28,35 @@ class VectorIndex:
 
     doc_ids: list[str]
     doc_vectors: np.ndarray
+    dimensions: int
 
     @staticmethod
-    def index(doc_ids: list[str], doc_vectors: np.ndarray) -> "VectorIndex":
+    def index(
+        doc_ids: list[str],
+        doc_vectors: np.ndarray,
+        dimensions: int = DEFAULT_DIMENSIONS,
+    ) -> "VectorIndex":
         """Build an index from original document vectors.
 
         Students should customize this static method when replacing the
         baseline index. The document IDs must remain aligned with the rows in
         the stored vector array.
         """
+        if dimensions <= 0:
+            raise ValueError("dimensions must be greater than zero")
         if len(doc_ids) != len(doc_vectors):
             raise ValueError("Document IDs and vectors must have the same length")
-        if doc_vectors.ndim != 2 or doc_vectors.shape[1] < NUM_DIMENSIONS:
+        if doc_vectors.ndim != 2 or doc_vectors.shape[1] < dimensions:
             raise ValueError(
-                f"Document vectors must have at least {NUM_DIMENSIONS} dimensions"
+                f"Document vectors must have at least {dimensions} dimensions"
             )
 
         # Keeping only a prefix makes this intentionally naive implementation
         # small and gives students a clear place to try a better index later.
         return VectorIndex(
             doc_ids,
-            np.asarray(doc_vectors[:, :NUM_DIMENSIONS], dtype=np.float32),
+            np.asarray(doc_vectors[:, :dimensions], dtype=np.float32),
+            dimensions,
         )
 
     def query(self, query_vector: np.ndarray, top_k: int | None = None):
@@ -58,14 +66,14 @@ class VectorIndex:
         search. The baseline uses a brute-force dot product against every
         indexed document. ``rank`` starts at one for the HTTP response.
         """
-        if len(query_vector) < NUM_DIMENSIONS:
+        if len(query_vector) < self.dimensions:
             raise ValueError(
-                f"Query vector must contain at least {NUM_DIMENSIONS} dimensions"
+                f"Query vector must contain at least {self.dimensions} dimensions"
             )
 
         # Both arrays have already been limited to 20 dimensions. A dot
         # product gives one similarity score for every indexed document.
-        scores = self.doc_vectors @ query_vector[:NUM_DIMENSIONS]
+        scores = self.doc_vectors @ query_vector[: self.dimensions]
         ranked_indexes = np.argsort(-scores, kind="stable")
         if top_k is not None:
             ranked_indexes = ranked_indexes[:top_k]
@@ -75,23 +83,27 @@ class VectorIndex:
         ]
 
 
-def load_index(index_path: Path) -> VectorIndex:
+def load_index(
+    index_path: Path, dimensions: int = DEFAULT_DIMENSIONS
+) -> VectorIndex:
     """Read the embeddings CSV and build the student index."""
     doc_ids = []
     vectors = []
     with index_path.open(newline="") as index_file:
         for row_number, row in enumerate(csv.reader(index_file), start=1):
-            if len(row) < NUM_DIMENSIONS + 1:
+            if len(row) < dimensions + 1:
                 raise ValueError(
                     f"Index row {row_number} must contain a doc_id and "
-                    f"at least {NUM_DIMENSIONS} dimensions"
+                    f"at least {dimensions} dimensions"
                 )
             doc_ids.append(row[0])
             vectors.append([float(value) for value in row[1:]])
 
     if not vectors:
         raise ValueError("Index must contain at least one document")
-    return VectorIndex.index(doc_ids, np.asarray(vectors, dtype=np.float32))
+    return VectorIndex.index(
+        doc_ids, np.asarray(vectors, dtype=np.float32), dimensions=dimensions
+    )
 
 
 def make_query_handler(vector_index: VectorIndex):
@@ -114,9 +126,10 @@ def make_query_handler(vector_index: VectorIndex):
                     [float(value) for value in fields["vector"][0].split(",")],
                     dtype=np.float32,
                 )
-                if len(query_vector) < NUM_DIMENSIONS:
+                if len(query_vector) < vector_index.dimensions:
                     raise ValueError(
-                        f"Query vector must contain at least {NUM_DIMENSIONS} dimensions"
+                        "Query vector must contain at least "
+                        f"{vector_index.dimensions} dimensions"
                     )
             except (KeyError, TypeError, ValueError) as error:
                 self.send_error(400, str(error))
@@ -145,9 +158,10 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(prog="naive-vector-search")
     parser.add_argument("--index", type=Path, required=True)
     parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--dimensions", type=int, default=DEFAULT_DIMENSIONS)
     args = parser.parse_args(argv)
 
-    vector_index = load_index(args.index)
+    vector_index = load_index(args.index, dimensions=args.dimensions)
     handler = make_query_handler(vector_index)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
 
