@@ -32,6 +32,11 @@ Previously calculateSum was a loop over an array, but by unrolling the loop
 and performing SIMD operations, we were able to make better use of the hardware.
 ```
 
+## Staging commits
+
+If you're asked to commit, and there's been multiple logical changes, then try to stage commits one after the other
+so that the commit history take tells a clear story.
+
 ## Pre-commit hooks
 
 Expect various pre-commit hooks to run. Those exist to protect the codebase against bad changes.
