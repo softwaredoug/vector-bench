@@ -1,17 +1,27 @@
-import csv
 import subprocess
 import sys
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import numpy as np
+
+from vector_bench.storage import write_index
+
 
 def test_naive_search_indexes_and_queries_embeddings(tmp_path):
-    index_path = tmp_path / "embeddings.csv"
-    with index_path.open("w", newline="") as index_file:
-        writer = csv.writer(index_file)
-        writer.writerow(["doc-a", 1, 0, *([0] * 19), 1000, 0])
-        writer.writerow(["doc-b", 0, 2, *([0] * 19), 0, 0])
-        writer.writerow(["doc-c", 0, 0, *([0] * 19), 2000, 0])
+    index_path = tmp_path / "embeddings.h5"
+    write_index(
+        index_path,
+        ["doc-a", "doc-b", "doc-c"],
+        np.array(
+            [
+                [1, 0, *([0] * 19), 1000, 0],
+                [0, 2, *([0] * 19), 0, 0],
+                [0, 0, *([0] * 19), 2000, 0],
+            ],
+            dtype=np.float64,
+        ),
+    )
 
     port = 18765
     process = subprocess.Popen(

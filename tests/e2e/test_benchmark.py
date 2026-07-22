@@ -6,8 +6,8 @@ from vector_bench.prepare import main as prepare_main
 
 def test_benchmark_main_replays_prepared_files(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("VECTOR_BENCH_DATA_DIR", str(tmp_path / "cache"))
-    index_path = tmp_path / "index.csv"
-    queries_path = tmp_path / "queries.csv"
+    index_path = tmp_path / "index.h5"
+    queries_path = tmp_path / "queries.h5"
 
     prepare_main(
         [

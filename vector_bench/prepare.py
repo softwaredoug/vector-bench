@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -11,13 +10,13 @@ from .datasets import get_dataset
 from .embeddings import (
     DEFAULT_MODEL_NAME,
     corpus_embedding_artifacts,
-    embedding_csv_lines,
     query_embeddings,
 )
+from .storage import write_index, write_queries
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    """Create the index and query CSV files for a benchmark run."""
+    """Create the HDF5 index and query files for a benchmark run."""
     parser = argparse.ArgumentParser(prog="prepare")
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--model", default=DEFAULT_MODEL_NAME)
@@ -47,26 +46,17 @@ def main(argv: Sequence[str] | None = None) -> None:
         model_name=args.model,
     )
 
-    with args.index_out.open("w", newline="") as index_file:
-        index_file.writelines(embedding_csv_lines(corpus, corpus_vectors))
+    write_index(args.index_out, corpus["doc_id"], corpus_vectors)
 
-    vectors_by_doc_id = {
-        str(doc_id): vector
-        for doc_id, vector in zip(corpus["doc_id"], corpus_vectors)
-    }
-    query_rows = []
+    query_ids = [str(query_id) for query_id in query_ids]
+    query_rankings = {}
     for query_id, query_vector in zip(query_ids, query_vectors):
-        query_rows.append((str(query_id), "-1", -1, query_vector))
-        for rank, doc_id in enumerate(rankings[str(query_id)], start=1):
-            query_rows.append(
-                (str(query_id), str(doc_id), rank, vectors_by_doc_id[str(doc_id)])
-            )
+        query_rankings[str(query_id)] = rankings[str(query_id)]
 
-    query_rows.sort(key=lambda row: (row[0], row[2]))
-    with args.queries_out.open("w", newline="") as queries_file:
-        writer = csv.writer(queries_file, lineterminator="\n")
-        for query_id, doc_id, rank, vector in query_rows:
-            writer.writerow([query_id, doc_id, rank, *vector])
+    sort_order = sorted(range(len(query_ids)), key=lambda index: query_ids[index])
+    sorted_query_ids = [query_ids[index] for index in sort_order]
+    sorted_query_vectors = query_vectors[sort_order]
+    write_queries(args.queries_out, sorted_query_ids, sorted_query_vectors, query_rankings)
 
 
 if __name__ == "__main__":

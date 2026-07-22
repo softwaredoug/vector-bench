@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +38,7 @@ def embed_corpus(
     top_k: int = 1000,
     show_progress: bool = True,
 ) -> tuple[dict[str, list[str]], list[str]]:
-    """Create embeddings, ground truth, and student-tool CSV lines."""
+    """Create embeddings and ground truth rankings."""
     embeddings, rankings = corpus_embedding_artifacts(
         corpus,
         judgments,
@@ -50,7 +49,7 @@ def embed_corpus(
         top_k=top_k,
         show_progress=show_progress,
     )
-    return rankings, list(embedding_csv_lines(corpus, embeddings))
+    return rankings, embeddings
 
 
 def corpus_embedding_artifacts(
@@ -259,13 +258,3 @@ def _write_ground_truth(
     with temporary_path.open("w", encoding="utf-8") as cache_file:
         json.dump(payload, cache_file)
     temporary_path.replace(cache_path)
-
-
-def embedding_csv_lines(corpus: Any, embeddings: Any) -> Iterator[str]:
-    """Yield student-tool CSV lines for corpus embeddings."""
-    if len(corpus) != len(embeddings):
-        raise ValueError("Corpus and embeddings must contain the same number of rows")
-
-    for doc_id, embedding in zip(corpus["doc_id"], embeddings):
-        values = ",".join(str(value) for value in embedding)
-        yield f"{doc_id},{values}\n"

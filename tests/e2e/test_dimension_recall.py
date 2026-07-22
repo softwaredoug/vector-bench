@@ -9,8 +9,8 @@ def test_recall_improves_when_naive_search_uses_more_dimensions(
 ):
     monkeypatch.setenv("VECTOR_BENCH_DATA_DIR", str(tmp_path / "cache"))
 
-    index_path = tmp_path / "embeddings.csv"
-    queries_path = tmp_path / "queries.csv"
+    index_path = tmp_path / "embeddings.h5"
+    queries_path = tmp_path / "queries.h5"
     prepare_main(
         [
             "--dataset",

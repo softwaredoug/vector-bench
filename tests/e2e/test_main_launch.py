@@ -5,8 +5,8 @@ from vector_bench.prepare import main as prepare_main
 
 
 def test_main_launches_student_command_and_waits_for_ready(tmp_path):
-    index_path = tmp_path / "embeddings.csv"
-    queries_path = tmp_path / "queries.csv"
+    index_path = tmp_path / "embeddings.h5"
+    queries_path = tmp_path / "queries.h5"
     prepare_main(
         [
             "--dataset",

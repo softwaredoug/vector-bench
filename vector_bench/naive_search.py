@@ -16,6 +16,8 @@ from urllib.parse import parse_qs
 
 import numpy as np
 
+from .storage import read_index
+
 
 # The benchmark provides full-size embeddings, but this demo intentionally
 # uses only a small prefix so the search implementation stays straightforward.
@@ -55,7 +57,7 @@ class VectorIndex:
         # small and gives students a clear place to try a better index later.
         return VectorIndex(
             doc_ids,
-            np.asarray(doc_vectors[:, :dimensions], dtype=np.float32),
+            np.asarray(doc_vectors[:, :dimensions]),
             dimensions,
         )
 
@@ -86,23 +88,12 @@ class VectorIndex:
 def load_index(
     index_path: Path, dimensions: int = DEFAULT_DIMENSIONS
 ) -> VectorIndex:
-    """Read the embeddings CSV and build the student index."""
-    doc_ids = []
-    vectors = []
-    with index_path.open(newline="") as index_file:
-        for row_number, row in enumerate(csv.reader(index_file), start=1):
-            if len(row) < dimensions + 1:
-                raise ValueError(
-                    f"Index row {row_number} must contain a doc_id and "
-                    f"at least {dimensions} dimensions"
-                )
-            doc_ids.append(row[0])
-            vectors.append([float(value) for value in row[1:]])
-
-    if not vectors:
+    """Read the HDF5 embeddings and build the student index."""
+    doc_ids, vectors = read_index(index_path)
+    if len(vectors) == 0:
         raise ValueError("Index must contain at least one document")
     return VectorIndex.index(
-        doc_ids, np.asarray(vectors, dtype=np.float32), dimensions=dimensions
+        doc_ids, np.asarray(vectors), dimensions=dimensions
     )
 
 
@@ -124,7 +115,7 @@ def make_query_handler(vector_index: VectorIndex):
                 query_id = fields["query_id"][0]
                 query_vector = np.asarray(
                     [float(value) for value in fields["vector"][0].split(",")],
-                    dtype=np.float32,
+                    dtype=np.float64,
                 )
                 if len(query_vector) < vector_index.dimensions:
                     raise ValueError(

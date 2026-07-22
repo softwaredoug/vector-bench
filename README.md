@@ -11,13 +11,13 @@ then it will search with the dataset queries, scoring recall and latency.
 The student CLI works as follows:
 
 ```
-cmd --documents --index <dataset.csv> --port 1234 --results <results.csv>
+cmd --documents --index <dataset.h5> --port 1234
 ```
 
 The following is also acceptable:
 
 ```
-cmd <dataset.csv> 1234 <results.csv>
+cmd <dataset.h5> 1234 <results.csv>
 ```
 
 The command outputs "READY" when the index is ready to accept queries.
@@ -45,13 +45,43 @@ Optionally the vector can be appended, and will be ignored in evaluation.
 There's a silly CLI in this repo that does brute-force vector search to implement these requirements.
 
 
+## Data prep CLI
+
+A data prep task exists to construct embeddings + ground truth.
+
+Why? To let us distribute index / ground truth with training without the student needing to embed everything. To avoid
+keeping embeddings in memory during evaluation (hopefully only the student's own script needs to do this)
+
+```
+prepare --dataset msmarco --index-out corpus.h5 --queries-out queries.h5 --num-queries <N>
+```
+
+This prepares a portable HDF5 corpus of vectors to be indexed by the student's script and HDF5 query ground truth to replay. The project depends on `h5py` for this format.
+
+The index HDF5 file contains:
+
+```
+doc_ids: one UTF-8 document ID per row
+vectors: a two-dimensional numeric dataset aligned with doc_ids
+```
+
+The queries HDF5 file contains:
+
+```
+query_ids: one UTF-8 query ID per row
+vectors: a two-dimensional numeric dataset aligned with query_ids
+ground_truth: ranked document IDs, one row per query
+```
+
+The query rows are sorted by query ID and the ground truth columns are sorted by rank. Numeric datasets retain their original NumPy precision.
+
+If --num-queries is specified, then only that many queries will be sampled from the dataset. Otherwise all queries will be used.
+
+
 ## Benchmark CLI
 
 Benchmark CLI works as follows:
 
 ```
-benchmark --dataset <msmarco,...> --model <minilm-l6-v2...> -- <student-cli>
+benchmark --index corpus.h5 --queries queries.h5 -- <student-cli>
 ```
-
-Benchmark CLI then loads the dataset (via cheat-at-search), loads the model via sentence transformers, and creates CSVs. 
-It calls the student CLI once "READY" is in stdout. It then issues queries, gathers results, and computes latency and recall.

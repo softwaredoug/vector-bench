@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -11,6 +10,7 @@ import numpy as np
 
 from .runner import launch_student
 from .search import search
+from .storage import read_queries
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -40,60 +40,11 @@ def main(argv: Sequence[str] | None = None) -> None:
 def load_queries(
     queries_path: Path,
 ) -> tuple[list[str], np.ndarray, dict[str, list[str]]]:
-    """Load query vectors and ranked document IDs from a prepared CSV."""
-    query_ids = []
-    query_vectors = []
-    ground_truth = {}
-    dimensions = None
-
-    with queries_path.open(newline="") as queries_file:
-        rows = csv.reader(queries_file)
-        for row_number, row in enumerate(rows, start=1):
-            if len(row) < 4:
-                raise ValueError(
-                    f"Query row {row_number} must contain query_id, doc_id, "
-                    "rank, and a vector"
-                )
-            query_id, doc_id = row[0], row[1]
-            try:
-                rank = int(row[2])
-                vector = np.asarray([float(value) for value in row[3:]], dtype=np.float32)
-            except ValueError as error:
-                raise ValueError(f"Invalid query row {row_number}") from error
-
-            if dimensions is None:
-                dimensions = len(vector)
-            elif len(vector) != dimensions:
-                raise ValueError("All query vectors must have the same dimensions")
-
-            if rank == -1 and doc_id == "-1":
-                if query_id in ground_truth:
-                    raise ValueError(f"Duplicate query embedding for {query_id!r}")
-                query_ids.append(query_id)
-                query_vectors.append(vector)
-                ground_truth[query_id] = []
-            elif rank >= 1:
-                if query_id not in ground_truth:
-                    raise ValueError(
-                        f"Query embedding must precede ranked rows for {query_id!r}"
-                    )
-                ground_truth[query_id].append((rank, doc_id))
-            else:
-                raise ValueError(
-                    f"Query row {row_number} must use rank/doc_id -1 for a query "
-                    "embedding or a positive rank for a document"
-                )
-
+    """Load query vectors and ranked document IDs from prepared HDF5."""
+    query_ids, query_vectors, ground_truth = read_queries(queries_path)
     if not query_ids:
         raise ValueError("Queries file must contain at least one query")
-
-    ranked_ground_truth = {
-        query_id: [
-            doc_id for _rank, doc_id in sorted(ranked_rows, key=lambda item: item[0])
-        ]
-        for query_id, ranked_rows in ground_truth.items()
-    }
-    return query_ids, np.asarray(query_vectors, dtype=np.float32), ranked_ground_truth
+    return query_ids, np.asarray(query_vectors), ground_truth
 
 
 if __name__ == "__main__":

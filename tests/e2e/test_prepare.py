@@ -1,5 +1,4 @@
-import csv
-
+import h5py
 import numpy as np
 import pytest
 
@@ -12,8 +11,8 @@ def test_prepare_main_writes_index_and_queries(
     tmp_path, monkeypatch, num_queries
 ):
     monkeypatch.setenv("VECTOR_BENCH_DATA_DIR", str(tmp_path / "cache"))
-    index_path = tmp_path / "index.csv"
-    queries_path = tmp_path / "queries.csv"
+    index_path = tmp_path / "index.h5"
+    queries_path = tmp_path / "queries.h5"
 
     arguments = [
         "--dataset",
@@ -30,38 +29,35 @@ def test_prepare_main_writes_index_and_queries(
     main(arguments)
 
     corpus, judgments = get_dataset("dougs_blog_data")
-    with index_path.open(newline="") as index_file:
-        index_rows = list(csv.reader(index_file))
-    with queries_path.open(newline="") as queries_file:
-        query_rows = list(csv.reader(queries_file))
+    with h5py.File(index_path) as index_file:
+        doc_ids = [value.decode() if isinstance(value, bytes) else value for value in index_file["doc_ids"]]
+        document_vectors = index_file["vectors"][:]
+    with h5py.File(queries_path) as queries_file:
+        query_file_ids = [value.decode() if isinstance(value, bytes) else value for value in queries_file["query_ids"]]
+        query_vectors = queries_file["vectors"][:]
+        ground_truth = queries_file["ground_truth"][:]
 
-    assert len(index_rows) == len(corpus)
-    assert index_rows[0][0] == str(corpus.iloc[0]["doc_id"])
-    assert len(index_rows[0]) > 1
+    assert len(doc_ids) == len(corpus)
+    assert doc_ids[0] == str(corpus.iloc[0]["doc_id"])
+    assert document_vectors.ndim == 2
 
     query_ids = [str(query_id) for query_id in judgments["query_id"].drop_duplicates()]
     if num_queries is not None:
         query_ids = query_ids[:num_queries]
-    query_embedding_ids = [
-        row[0] for row in query_rows if row[1:3] == ["-1", "-1"]
-    ]
-    assert query_embedding_ids == sorted(query_ids)
-    assert {row[0] for row in query_rows} == set(query_ids)
-    assert all(len(row) == len(index_rows[0]) + 2 for row in query_rows)
+    assert query_file_ids == sorted(query_ids)
+    assert query_vectors.shape[0] == len(query_ids)
+    assert ground_truth.shape[0] == len(query_ids)
 
-    rows_by_query = {}
-    for row in query_rows:
-        rows_by_query.setdefault(row[0], []).append(row)
-    for rows in rows_by_query.values():
-        assert rows[0][1:3] == ["-1", "-1"]
-        assert [int(row[2]) for row in rows[1:]] == list(range(1, len(rows)))
-        assert rows == sorted(rows, key=lambda row: int(row[2]))
-
-        query_vector = np.asarray([float(value) for value in rows[0][3:]])
-        document_vectors = np.asarray(
-            [[float(value) for value in row[3:]] for row in rows[1:]]
-        )
-        expected_order = np.argsort(-(document_vectors @ query_vector), kind="stable")
-        assert [rows[index + 1][1] for index in expected_order] == [
-            row[1] for row in rows[1:]
+    for query_index, query_id in enumerate(query_file_ids):
+        ranked_doc_ids = [
+            value.decode() if isinstance(value, bytes) else value
+            for value in ground_truth[query_index]
+            if value not in (b"", "")
         ]
+        ranked_vectors = np.asarray(
+            [document_vectors[doc_ids.index(doc_id)] for doc_id in ranked_doc_ids]
+        )
+        expected_order = np.argsort(
+            -(ranked_vectors @ query_vectors[query_index]), kind="stable"
+        )
+        assert [ranked_doc_ids[index] for index in expected_order] == ranked_doc_ids
