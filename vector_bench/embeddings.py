@@ -39,6 +39,30 @@ def embed_corpus(
     show_progress: bool = True,
 ) -> tuple[dict[str, list[str]], list[str]]:
     """Create embeddings, ground truth, and student-tool CSV lines."""
+    embeddings, rankings = corpus_embedding_artifacts(
+        corpus,
+        judgments,
+        dataset_name=dataset_name,
+        model_name=model_name,
+        device=device,
+        chunk_size=chunk_size,
+        top_k=top_k,
+        show_progress=show_progress,
+    )
+    return rankings, list(embedding_csv_lines(corpus, embeddings))
+
+
+def corpus_embedding_artifacts(
+    corpus: Any,
+    judgments: Any,
+    dataset_name: str,
+    model_name: str = DEFAULT_MODEL_NAME,
+    device: str | None = None,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    top_k: int = 1000,
+    show_progress: bool = True,
+) -> tuple[np.ndarray, dict[str, list[str]]]:
+    """Create corpus embeddings and their ranked query ground truth."""
     embeddings, _model = load_or_create_embeddings(
         corpus,
         passage_fn=passage_fn,
@@ -57,7 +81,7 @@ def embed_corpus(
         top_k=top_k,
         show_progress=show_progress,
     )
-    return rankings, list(embedding_csv_lines(corpus, embeddings))
+    return np.asarray(embeddings), rankings
 
 
 def ground_truth(
@@ -70,7 +94,8 @@ def ground_truth(
     top_k: int = 1000,
     show_progress: bool = True,
 ) -> dict[str, list[str]]:
-    """Return or create cosine-similarity rankings for judged queries."""
+    """Return or create dot-product rankings for judged queries."""
+    print("Loading ground truth")
     if top_k <= 0:
         raise ValueError("top_k must be greater than zero")
     if len(corpus) != len(corpus_embeddings):
@@ -85,8 +110,10 @@ def ground_truth(
         top_k,
         corpus_embeddings.shape[1],
     )
+    print(f"Ground truth signature: {signature}")
     cache_path = _cache_dir() / f"ground_truth_{signature}.json"
     if cache_path.exists():
+        print("Opening cached ground truth")
         with cache_path.open(encoding="utf-8") as cache_file:
             cached = json.load(cache_file)
         return cached["rankings"]
@@ -98,21 +125,12 @@ def ground_truth(
         device=device,
         show_progress=show_progress,
     )
-    document_norms = np.linalg.norm(corpus_embeddings, axis=1)
-    query_norms = np.linalg.norm(query_embeddings, axis=1)
-    if np.any(document_norms == 0) or np.any(query_norms == 0):
-        raise ValueError("Cosine similarity does not support zero-length vectors")
-
-    normalized_documents = corpus_embeddings / document_norms[:, np.newaxis]
-    normalized_queries = query_embeddings / query_norms[:, np.newaxis]
-    scores = normalized_queries @ normalized_documents.T
-    ranked_indexes = np.argsort(-scores, axis=1, kind="stable")
-    ranked_indexes = ranked_indexes[:, : min(top_k, len(corpus))]
     doc_ids = [str(doc_id) for doc_id in corpus["doc_id"]]
-    rankings = {
-        str(query_id): [doc_ids[index] for index in indexes]
-        for query_id, indexes in zip(queries["query_id"], ranked_indexes)
-    }
+    rankings = {}
+    for query_id, query_embedding in zip(queries["query_id"], query_embeddings):
+        scores = corpus_embeddings @ query_embedding
+        ranked_indexes = np.argsort(-scores, kind="stable")[:top_k]
+        rankings[str(query_id)] = [doc_ids[index] for index in ranked_indexes]
     _write_ground_truth(cache_path, dataset_name, model_name, top_k, rankings)
     return rankings
 
@@ -160,6 +178,7 @@ def _ground_truth_signature(
     payload = {
         "dataset": dataset_name,
         "model": model_name,
+        "similarity": "dot_product",
         "top_k": top_k,
         "embedding_dimension": embedding_dimension,
         "doc_ids": [str(doc_id) for doc_id in corpus["doc_id"]],

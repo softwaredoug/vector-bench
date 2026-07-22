@@ -1,13 +1,13 @@
 import csv
 import json
-import sys
 
 from vector_bench.datasets import get_dataset
-from vector_bench.main import main
+from vector_bench.prepare import main
 
 
 def test_cli_writes_index_and_caches_ground_truth(tmp_path, monkeypatch):
-    output_path = tmp_path / "embeddings.csv"
+    index_path = tmp_path / "embeddings.csv"
+    queries_path = tmp_path / "queries.csv"
     cache_path = tmp_path / "cache"
     monkeypatch.setenv("VECTOR_BENCH_DATA_DIR", str(cache_path))
 
@@ -17,17 +17,15 @@ def test_cli_writes_index_and_caches_ground_truth(tmp_path, monkeypatch):
             "dougs_blog_data",
             "--top-k",
             "5",
-            "--embeddings-file",
-            str(output_path),
-            "--",
-            sys.executable,
-            "-m",
-            "vector_bench.naive_search",
+            "--index-out",
+            str(index_path),
+            "--queries-out",
+            str(queries_path),
         ]
     )
 
     corpus, _ = get_dataset("dougs_blog_data")
-    with output_path.open(newline="") as output_file:
+    with index_path.open(newline="") as output_file:
         rows = list(csv.reader(output_file))
 
     assert len(rows) == len(corpus)

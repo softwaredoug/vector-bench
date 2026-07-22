@@ -1,6 +1,7 @@
 import sys
 
-from vector_bench.main import main
+from vector_bench.main import main as benchmark_main
+from vector_bench.prepare import main as prepare_main
 
 
 def test_main_searches_student_and_prints_recall_and_latency(
@@ -8,14 +9,29 @@ def test_main_searches_student_and_prints_recall_and_latency(
 ):
     monkeypatch.setenv("VECTOR_BENCH_DATA_DIR", str(tmp_path / "cache"))
 
-    main(
+    index_path = tmp_path / "embeddings.csv"
+    queries_path = tmp_path / "queries.csv"
+    prepare_main(
         [
             "--dataset",
             "dougs_blog_data",
             "--top-k",
             "5",
-            "--embeddings-file",
-            str(tmp_path / "embeddings.csv"),
+            "--index-out",
+            str(index_path),
+            "--queries-out",
+            str(queries_path),
+        ]
+    )
+    capsys.readouterr()
+    benchmark_main(
+        [
+            "--index",
+            str(index_path),
+            "--queries",
+            str(queries_path),
+            "--top-k",
+            "5",
             "--",
             sys.executable,
             "-m",

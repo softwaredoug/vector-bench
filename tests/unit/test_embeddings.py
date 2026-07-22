@@ -61,7 +61,7 @@ def test_embed_corpus_returns_ground_truth_and_csv_lines(
     )
 
 
-def test_ground_truth_uses_stable_cosine_order_and_top_k(tmp_path, monkeypatch):
+def test_ground_truth_uses_stable_dot_product_order_and_top_k(tmp_path, monkeypatch):
     monkeypatch.setenv("VECTOR_BENCH_DATA_DIR", str(tmp_path))
     corpus = pd.DataFrame({"doc_id": ["doc-a", "doc-b", "doc-c"]})
     judgments = pd.DataFrame(
@@ -92,7 +92,32 @@ def test_ground_truth_uses_stable_cosine_order_and_top_k(tmp_path, monkeypatch):
     }
 
 
-def test_ground_truth_rejects_zero_vectors(tmp_path, monkeypatch):
+def test_ground_truth_uses_direct_dot_product_for_normalized_vectors(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("VECTOR_BENCH_DATA_DIR", str(tmp_path))
+    corpus = pd.DataFrame({"doc_id": ["doc-a", "doc-b"]})
+    judgments = pd.DataFrame({"query_id": ["q1"], "query": ["query"]})
+    corpus_embeddings = np.array([[1, 0], [2, 1]], dtype=np.float32)
+
+    with patch(
+        "vector_bench.embeddings._query_embeddings",
+        return_value=np.array([[1, 0]], dtype=np.float32),
+    ):
+        from vector_bench.embeddings import ground_truth
+
+        result = ground_truth(
+            corpus,
+            judgments,
+            corpus_embeddings,
+            dataset_name="test",
+            top_k=2,
+        )
+
+    assert result == {"q1": ["doc-b", "doc-a"]}
+
+
+def test_ground_truth_uses_direct_dot_product_with_zero_vectors(tmp_path, monkeypatch):
     monkeypatch.setenv("VECTOR_BENCH_DATA_DIR", str(tmp_path))
     corpus = pd.DataFrame({"doc_id": ["doc-a"]})
     judgments = pd.DataFrame({"query_id": ["q1"], "query": ["query"]})
@@ -103,13 +128,14 @@ def test_ground_truth_rejects_zero_vectors(tmp_path, monkeypatch):
     ):
         from vector_bench.embeddings import ground_truth
 
-        with pytest.raises(ValueError, match="zero-length vectors"):
-            ground_truth(
-                corpus,
-                judgments,
-                np.array([[0, 0]], dtype=np.float32),
-                dataset_name="test",
-            )
+        result = ground_truth(
+            corpus,
+            judgments,
+            np.array([[0, 0]], dtype=np.float32),
+            dataset_name="test",
+        )
+
+    assert result == {"q1": ["doc-a"]}
 
 
 def test_ground_truth_uses_cached_rankings(tmp_path, monkeypatch):
