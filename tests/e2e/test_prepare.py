@@ -1,28 +1,33 @@
 import csv
 
 import numpy as np
+import pytest
 
 from vector_bench.datasets import get_dataset
 from vector_bench.prepare import main
 
 
-def test_prepare_main_writes_index_and_queries(tmp_path, monkeypatch):
+@pytest.mark.parametrize("num_queries", [None, 2])
+def test_prepare_main_writes_index_and_queries(
+    tmp_path, monkeypatch, num_queries
+):
     monkeypatch.setenv("VECTOR_BENCH_DATA_DIR", str(tmp_path / "cache"))
     index_path = tmp_path / "index.csv"
     queries_path = tmp_path / "queries.csv"
 
-    main(
-        [
-            "--dataset",
-            "dougs_blog_data",
-            "--top-k",
-            "5",
-            "--index-out",
-            str(index_path),
-            "--queries-out",
-            str(queries_path),
-        ]
-    )
+    arguments = [
+        "--dataset",
+        "dougs_blog_data",
+        "--top-k",
+        "5",
+        "--index-out",
+        str(index_path),
+        "--queries-out",
+        str(queries_path),
+    ]
+    if num_queries is not None:
+        arguments[4:4] = ["--num-queries", str(num_queries)]
+    main(arguments)
 
     corpus, judgments = get_dataset("dougs_blog_data")
     with index_path.open(newline="") as index_file:
@@ -35,6 +40,12 @@ def test_prepare_main_writes_index_and_queries(tmp_path, monkeypatch):
     assert len(index_rows[0]) > 1
 
     query_ids = [str(query_id) for query_id in judgments["query_id"].drop_duplicates()]
+    if num_queries is not None:
+        query_ids = query_ids[:num_queries]
+    query_embedding_ids = [
+        row[0] for row in query_rows if row[1:3] == ["-1", "-1"]
+    ]
+    assert query_embedding_ids == sorted(query_ids)
     assert {row[0] for row in query_rows} == set(query_ids)
     assert all(len(row) == len(index_rows[0]) + 2 for row in query_rows)
 

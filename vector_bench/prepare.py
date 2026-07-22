@@ -22,11 +22,18 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--model", default=DEFAULT_MODEL_NAME)
     parser.add_argument("--top-k", type=int, default=1000)
+    parser.add_argument("--num-queries", type=int)
     parser.add_argument("--index-out", type=Path, required=True)
     parser.add_argument("--queries-out", type=Path, required=True)
     args = parser.parse_args(argv)
 
     corpus, judgments = get_dataset(args.dataset)
+    if args.num_queries is not None:
+        if args.num_queries <= 0:
+            parser.error("--num-queries must be greater than zero")
+        query_ids = judgments["query_id"].drop_duplicates().head(args.num_queries)
+        judgments = judgments[judgments["query_id"].isin(query_ids)]
+
     corpus_vectors, rankings = corpus_embedding_artifacts(
         corpus,
         judgments,
