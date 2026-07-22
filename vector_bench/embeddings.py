@@ -93,7 +93,7 @@ def ground_truth(
 
     query_embeddings = _query_embeddings(
         queries,
-        signature,
+        dataset_name=dataset_name,
         model_name=model_name,
         device=device,
         show_progress=show_progress,
@@ -115,6 +115,25 @@ def ground_truth(
     }
     _write_ground_truth(cache_path, dataset_name, model_name, top_k, rankings)
     return rankings
+
+
+def query_embeddings(
+    judgments: Any,
+    dataset_name: str,
+    model_name: str = DEFAULT_MODEL_NAME,
+    device: str | None = None,
+    show_progress: bool = True,
+) -> tuple[list[str], np.ndarray]:
+    """Return unique judged query IDs and their cached embedding vectors."""
+    queries = judgments[["query_id", "query"]].drop_duplicates("query_id")
+    vectors = _query_embeddings(
+        queries,
+        dataset_name=dataset_name,
+        model_name=model_name,
+        device=device,
+        show_progress=show_progress,
+    )
+    return [str(query_id) for query_id in queries["query_id"]], vectors
 
 
 def _cache_dir() -> Path:
@@ -156,12 +175,13 @@ def _ground_truth_signature(
 
 def _query_embeddings(
     queries: Any,
-    signature: str,
+    dataset_name: str,
     model_name: str,
     device: str | None,
     show_progress: bool,
 ) -> np.ndarray:
     """Load cached query vectors or encode the unique judged queries."""
+    signature = _query_signature(queries, dataset_name, model_name)
     cache_path = _cache_dir() / f"query_embeddings_{signature}.npy"
     if cache_path.exists():
         return np.load(cache_path)
@@ -176,6 +196,21 @@ def _query_embeddings(
     embeddings = np.asarray(embeddings)
     np.save(cache_path, embeddings)
     return embeddings
+
+
+def _query_signature(queries: Any, dataset_name: str, model_name: str) -> str:
+    """Create a cache key for query texts and their embedding model."""
+    payload = {
+        "dataset": dataset_name,
+        "model": model_name,
+        "queries": [
+            [str(query_id), str(query)]
+            for query_id, query in zip(queries["query_id"], queries["query"])
+        ],
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
 
 
 def _write_ground_truth(

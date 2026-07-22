@@ -6,8 +6,9 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from .datasets import get_dataset
-from .embeddings import DEFAULT_MODEL_NAME, embed_corpus
+from .embeddings import DEFAULT_MODEL_NAME, embed_corpus, query_embeddings
 from .runner import launch_student
+from .search import search
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -24,7 +25,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if not args.student_command:
         parser.error("a student command is required after --")
     corpus, judgments = get_dataset(args.dataset)
-    _ground_truth, embedding_lines = embed_corpus(
+    ground_truth, embedding_lines = embed_corpus(
         corpus,
         judgments,
         dataset_name=args.dataset,
@@ -41,8 +42,19 @@ def main(argv: Sequence[str] | None = None) -> None:
     with output_file:
         output_file.writelines(embedding_lines)
 
-    with launch_student(args.student_command, embeddings_path):
-        pass
+    query_ids, query_vectors = query_embeddings(
+        judgments,
+        dataset_name=args.dataset,
+        model_name=args.model,
+    )
+    with launch_student(args.student_command, embeddings_path) as student:
+        search(
+            student,
+            query_ids,
+            query_vectors,
+            ground_truth,
+            top_k=args.top_k,
+        )
 
 
 if __name__ == "__main__":
