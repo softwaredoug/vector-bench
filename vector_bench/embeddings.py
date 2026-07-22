@@ -16,6 +16,7 @@ from cheat_at_search.embeddings import (
     load_model,
     load_or_create_embeddings,
 )
+from tqdm.auto import tqdm
 
 
 def passage_fn(row: Any) -> str:
@@ -127,7 +128,13 @@ def ground_truth(
     )
     doc_ids = [str(doc_id) for doc_id in corpus["doc_id"]]
     rankings = {}
-    for query_id, query_embedding in zip(queries["query_id"], query_embeddings):
+    query_iterator = tqdm(
+        zip(queries["query_id"], query_embeddings),
+        total=len(queries),
+        desc="Ranking queries",
+        disable=not show_progress,
+    )
+    for query_id, query_embedding in query_iterator:
         scores = corpus_embeddings @ query_embedding
         ranked_indexes = np.argsort(-scores, kind="stable")[:top_k]
         rankings[str(query_id)] = [doc_ids[index] for index in ranked_indexes]

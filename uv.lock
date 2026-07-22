@@ -2826,6 +2826,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "cheat-at-search" },
+    { name = "tqdm" },
 ]
 
 [package.dev-dependencies]
@@ -2834,7 +2835,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "cheat-at-search", git = "https://github.com/softwaredoug/cheat-at-search.git" }]
+requires-dist = [
+    { name = "cheat-at-search", git = "https://github.com/softwaredoug/cheat-at-search.git" },
+    { name = "tqdm", specifier = ">=4.66.0" },
+]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=9.0.0" }]

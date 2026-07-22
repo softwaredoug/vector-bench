@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "cheat-at-search @ git+https://github.com/softwaredoug/cheat-at-search.git",
+    "tqdm>=4.66.0",
 ]
 
 [project.scripts]
