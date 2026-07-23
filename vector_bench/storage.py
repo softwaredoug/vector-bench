@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, Iterable, cast
 
 import h5py
 import numpy as np
 
 
-def _strings(values) -> np.ndarray:
+def _strings(values: Iterable[object]) -> np.ndarray:
     return np.asarray([str(value) for value in values], dtype=h5py.string_dtype())
 
 
 def write_index(path: Path, doc_ids, vectors: np.ndarray) -> None:
     """Write document IDs and vectors without converting the vector dtype."""
+    doc_ids = list(doc_ids)
     vectors = np.asarray(vectors)
     if vectors.ndim != 2 or len(doc_ids) != len(vectors):
         raise ValueError("Document IDs and vectors must have the same number of rows")
@@ -51,17 +53,22 @@ def write_queries(
 def read_index(path: Path) -> tuple[list[str], np.ndarray]:
     """Read document IDs and vectors from an HDF5 index."""
     with h5py.File(path, "r") as index_file:
-        doc_ids = [_decode(value) for value in index_file["doc_ids"][:]]
-        vectors = index_file["vectors"][:]
+        doc_id_dataset = cast(Any, index_file["doc_ids"])
+        vector_dataset = cast(Any, index_file["vectors"])
+        doc_ids = [_decode(value) for value in doc_id_dataset[:]]
+        vectors = np.asarray(vector_dataset[:])
     return doc_ids, vectors
 
 
 def read_queries(path: Path) -> tuple[list[str], np.ndarray, dict[str, list[str]]]:
     """Read query vectors and ranked document IDs from HDF5."""
     with h5py.File(path, "r") as queries_file:
-        query_ids = [_decode(value) for value in queries_file["query_ids"][:]]
-        vectors = queries_file["vectors"][:]
-        ranked_ids = queries_file["ground_truth"][:]
+        query_id_dataset = cast(Any, queries_file["query_ids"])
+        vector_dataset = cast(Any, queries_file["vectors"])
+        ranked_id_dataset = cast(Any, queries_file["ground_truth"])
+        query_ids = [_decode(value) for value in query_id_dataset[:]]
+        vectors = np.asarray(vector_dataset[:])
+        ranked_ids = ranked_id_dataset[:]
 
     ground_truth = {
         query_id: [_decode(value) for value in ranked_ids[index] if _decode(value)]

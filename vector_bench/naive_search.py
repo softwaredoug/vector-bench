@@ -138,7 +138,7 @@ def make_query_handler(vector_index: VectorIndex):
             self.end_headers()
             self.wfile.write(response)
 
-        def log_message(self, _format, *_args):
+        def log_message(self, format, *_args):
             """Keep request logs off stdout so READY remains unambiguous."""
 
     return QueryHandler

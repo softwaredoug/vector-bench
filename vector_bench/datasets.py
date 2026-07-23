@@ -1,6 +1,7 @@
 """Dataset registry for vector-bench."""
 
 from types import ModuleType
+from typing import Any
 
 from cheat_at_search import doug_blog_data, msmarco_data
 
@@ -11,7 +12,7 @@ DATASETS: dict[str, ModuleType] = {
 }
 
 
-def get_dataset(name: str) -> tuple[object, object]:
+def get_dataset(name: str) -> tuple[Any, Any]:
     """Return the corpus and judgments for a registered dataset."""
     key = name.lower()
     try:

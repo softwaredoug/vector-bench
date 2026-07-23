@@ -17,6 +17,7 @@ naive-vector-search = "vector_bench.naive_search:main"
 
 [dependency-groups]
 dev = [
+    "pyright>=1.1.390",
     "pytest>=9.0.0",
 ]
 
@@ -26,3 +27,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.pyright]
+include = ["vector_bench"]
+typeCheckingMode = "standard"

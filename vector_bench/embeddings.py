@@ -37,7 +37,7 @@ def embed_corpus(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     top_k: int = 1000,
     show_progress: bool = True,
-) -> tuple[dict[str, list[str]], list[str]]:
+) -> tuple[dict[str, list[str]], np.ndarray]:
     """Create embeddings and ground truth rankings."""
     embeddings, rankings = corpus_embedding_artifacts(
         corpus,
@@ -211,7 +211,7 @@ def _query_embeddings(
     if cache_path.exists():
         return np.load(cache_path)
 
-    model = load_model(model_name, device=device)
+    model: Any = load_model(model_name, device=device)
     query_texts = [str(query) for query in queries["query"]]
     embeddings = model.encode(
         query_texts,
