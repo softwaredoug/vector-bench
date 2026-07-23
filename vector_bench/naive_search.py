@@ -15,8 +15,9 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 import numpy as np
+import h5py
 
-from .storage import read_index
+from .storage import datasets
 
 
 # The benchmark provides full-size embeddings, but this demo intentionally
@@ -34,8 +35,8 @@ class VectorIndex:
 
     @staticmethod
     def index(
-        doc_ids: list[str],
-        doc_vectors: np.ndarray,
+        doc_ids: h5py.Dataset,
+        vectors: h5py.Dataset,
         dimensions: int = DEFAULT_DIMENSIONS,
     ) -> "VectorIndex":
         """Build an index from original document vectors.
@@ -46,19 +47,33 @@ class VectorIndex:
         """
         if dimensions <= 0:
             raise ValueError("dimensions must be greater than zero")
-        if len(doc_ids) != len(doc_vectors):
-            raise ValueError("Document IDs and vectors must have the same length")
-        if doc_vectors.ndim != 2 or doc_vectors.shape[1] < dimensions:
+
+        rows, orig_dims = vectors.shape
+
+        if orig_dims < dimensions:
             raise ValueError(
-                f"Document vectors must have at least {dimensions} dimensions"
+                f"vectors must contain at least {dimensions} dimensions"
             )
+
+        # Pre-allocate lower dimensional
+        index = np.empty((
+            rows,
+            dimensions,
+        ), dtype=np.float64)
+
+        index_doc_ids = []
+
+        # Concat vectors + doc_ids
+        for doc_id, vector in zip(doc_ids, vectors):
+            index_doc_ids.append(doc_id.decode())
+            index[len(index_doc_ids) - 1] = vector[:dimensions]
 
         # Keeping only a prefix makes this intentionally naive implementation
         # small and gives students a clear place to try a better index later.
         return VectorIndex(
-            doc_ids,
-            np.asarray(doc_vectors[:, :dimensions]),
-            dimensions,
+            index_doc_ids,
+            doc_vectors=index,
+            dimensions=dimensions,
         )
 
     def query(self, query_vector: np.ndarray, top_k: int | None = None):
@@ -89,12 +104,12 @@ def load_index(
     index_path: Path, dimensions: int = DEFAULT_DIMENSIONS
 ) -> VectorIndex:
     """Read the HDF5 embeddings and build the student index."""
-    doc_ids, vectors = read_index(index_path)
-    if len(vectors) == 0:
-        raise ValueError("Index must contain at least one document")
-    return VectorIndex.index(
-        doc_ids, np.asarray(vectors), dimensions=dimensions
-    )
+    with datasets(index_path) as (doc_ids, vectors):
+        return VectorIndex.index(
+            doc_ids,
+            vectors,
+            dimensions=dimensions
+        )
 
 
 def make_query_handler(vector_index: VectorIndex):
@@ -137,9 +152,6 @@ def make_query_handler(vector_index: VectorIndex):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response)
-
-        def log_message(self, format, *_args):
-            """Keep request logs off stdout so READY remains unambiguous."""
 
     return QueryHandler
 

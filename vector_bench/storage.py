@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterable, cast
+from typing import Any, Iterable, cast, Generator
+from contextlib import contextmanager
 
 import h5py
 import numpy as np
@@ -58,6 +59,17 @@ def read_index(path: Path) -> tuple[list[str], np.ndarray]:
         doc_ids = [_decode(value) for value in doc_id_dataset[:]]
         vectors = np.asarray(vector_dataset[:])
     return doc_ids, vectors
+
+
+@contextmanager
+def datasets(path: Path) -> Generator[tuple[h5py.Dataset, h5py.Dataset], None, None]:
+    """Read document IDs and vectors from an HDF5 file as a dataset."""
+    with h5py.File(path, "r") as index_file:
+        doc_id_dataset = index_file["doc_ids"]
+        vector_dataset = index_file["vectors"]
+        if not isinstance(doc_id_dataset, h5py.Dataset) or not isinstance(vector_dataset, h5py.Dataset):
+            raise ValueError("Expected 'doc_ids' and 'vectors' datasets in HDF5 file")
+        yield doc_id_dataset, vector_dataset
 
 
 def read_queries(path: Path) -> tuple[list[str], np.ndarray, dict[str, list[str]]]:
