@@ -40,6 +40,7 @@ def test_main_searches_student_and_prints_recall_and_latency(
     )
 
     output = capsys.readouterr().out.splitlines()
+    output = output[-11:]
 
     assert len(output) == 11
     average = output[-1].split(",")

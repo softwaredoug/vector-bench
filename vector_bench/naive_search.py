@@ -13,11 +13,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import StringIO
 from pathlib import Path
 from urllib.parse import parse_qs
+import sys
 
 import numpy as np
 import h5py
 
 from .storage import datasets
+from tqdm import tqdm
 
 
 # The benchmark provides full-size embeddings, but this demo intentionally
@@ -64,8 +66,10 @@ class VectorIndex:
         index_doc_ids = []
 
         # Concat vectors + doc_ids
-        for doc_id, vector in zip(doc_ids, vectors):
-            index_doc_ids.append(doc_id.decode())
+        for doc_id, vector in tqdm(zip(doc_ids, vectors), file=sys.stdout, total=rows, desc="Indexing", unit="doc"):
+            index_doc_ids.append(
+                doc_id.decode() if isinstance(doc_id, bytes) else str(doc_id)
+            )
             index[len(index_doc_ids) - 1] = vector[:dimensions]
 
         # Keeping only a prefix makes this intentionally naive implementation
@@ -165,6 +169,7 @@ def main(argv=None) -> None:
     args = parser.parse_args(argv)
 
     vector_index = load_index(args.index, dimensions=args.dimensions)
+    print("Inedx loaded")
     handler = make_query_handler(vector_index)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
 

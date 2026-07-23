@@ -2,6 +2,20 @@ import sys
 
 from vector_bench.main import main as benchmark_main
 from vector_bench.prepare import main as prepare_main
+from vector_bench.runner import launch_student
+
+
+def test_launch_student_handles_buffered_startup_output(tmp_path):
+    with launch_student(
+        [
+            sys.executable,
+            "-c",
+            "import time; print('INDEX LOADED'); print('READY', flush=True); time.sleep(10)",
+        ],
+        tmp_path / "index.h5",
+        ready_timeout=1,
+    ):
+        pass
 
 
 def test_benchmark_main_replays_prepared_files(tmp_path, monkeypatch, capsys):
@@ -39,6 +53,7 @@ def test_benchmark_main_replays_prepared_files(tmp_path, monkeypatch, capsys):
     )
 
     output = capsys.readouterr().out.splitlines()
-    assert len(output) == 11
-    assert output[-1].startswith(",")
-    assert all(len(row.split(",")) == 3 for row in output)
+    metrics = output[-11:]
+    assert len(metrics) == 11
+    assert metrics[-1].startswith(",")
+    assert all(len(row.split(",")) == 3 for row in metrics)

@@ -50,7 +50,10 @@ def test_naive_search_indexes_and_queries_embeddings(index_path):
     try:
         # assert_no_stderr(process)
         assert process.stdout is not None
-        assert process.stdout.readline().strip() == "READY"
+        assert any(
+            line.strip() == "READY"
+            for line in iter(process.stdout.readline, "")
+        )
 
         request = Request(
             f"http://127.0.0.1:{port}/query",

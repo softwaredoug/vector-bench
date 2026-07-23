@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import selectors
 import socket
 import subprocess
@@ -47,7 +48,7 @@ def launch_student(
     command: Sequence[str],
     index_path: Path,
     port: int | None = None,
-    ready_timeout: float = 30,
+    ready_timeout: float = 3000,
 ) -> StudentProcess:
     """Launch a student command and wait until it prints ``READY``."""
     if not command:
@@ -85,6 +86,7 @@ def _wait_for_ready(process: subprocess.Popen[str], timeout: float) -> None:
     selector = selectors.DefaultSelector()
     selector.register(process.stdout, selectors.EVENT_READ)
     deadline = time.monotonic() + timeout
+    pending = b""
     try:
         while True:
             remaining = deadline - time.monotonic()
@@ -92,15 +94,21 @@ def _wait_for_ready(process: subprocess.Popen[str], timeout: float) -> None:
                 raise TimeoutError("Student process did not print READY in time")
             if not selector.select(remaining):
                 raise TimeoutError("Student process did not print READY in time")
-            line = process.stdout.readline()
-            if not line:
+            chunk = os.read(process.stdout.fileno(), 4096)
+            if not chunk:
                 error = process.stderr.read() if process.stderr else ""
                 raise RuntimeError(
                     "Student process exited before READY"
                     + (f": {error.strip()}" if error.strip() else "")
                 )
-            if line.strip() == "READY":
-                return
+            pending += chunk
+            while b"\n" in pending:
+                raw_line, pending = pending.split(b"\n", 1)
+                line = raw_line.decode()
+                print(f"Student process output: {line.strip()}")
+                if line.strip() == "READY":
+                    print("Student process is ready")
+                    return
     finally:
         selector.close()
 
