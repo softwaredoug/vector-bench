@@ -48,7 +48,7 @@ def test_benchmark_main_replays_prepared_files(tmp_path, monkeypatch, capsys):
             "--",
             sys.executable,
             "-m",
-            "vector_bench.naive_search",
+            "exps.naive_search",
         ]
     )
 

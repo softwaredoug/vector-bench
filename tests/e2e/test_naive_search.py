@@ -2,11 +2,10 @@ import subprocess
 import sys
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+import h5py
 import pytest
 
 import numpy as np
-
-from vector_bench.storage import write_index
 
 
 @pytest.fixture
@@ -20,11 +19,11 @@ def index_path(tmp_path):
         ],
         dtype=np.float64,
     )
-    write_index(
-        index_path,
-        ["doc-a", "doc-b", "doc-c"],
-        vectors
-    )
+    with h5py.File(index_path, "w") as index_file:
+        index_file.create_dataset(
+            "doc_ids", data=[doc_id.encode() for doc_id in ["doc-a", "doc-b", "doc-c"]]
+        )
+        index_file.create_dataset("vectors", data=vectors)
     return index_path
 
 
@@ -35,11 +34,13 @@ def test_naive_search_indexes_and_queries_embeddings(index_path):
         [
             sys.executable,
             "-c",
-            "from vector_bench.naive_search import main; main()",
+            "from exps.naive_search import main; main()",
             "--index",
             str(index_path),
             "--port",
             str(port),
+            "--dimensions",
+            "20",
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

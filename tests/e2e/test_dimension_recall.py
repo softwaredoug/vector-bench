@@ -37,7 +37,7 @@ def test_recall_improves_when_naive_search_uses_more_dimensions(
                 "--",
                 sys.executable,
                 "-m",
-                "vector_bench.naive_search",
+                "exps.naive_search",
                 "--dimensions",
                 str(dimensions),
             ]

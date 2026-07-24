@@ -1,30 +1,42 @@
 """A deliberately simple brute-force vector search application.
 
-This module is also intended to be readable as a student starter application.
-It is a separate process from the benchmark and communicates with the
-benchmark only through the index file and HTTP protocol documented in the
-project README.
+This application is separate from the benchmark and communicates with it only
+through the HDF5 index format and HTTP protocol documented in the project
+README. It is also intended to be readable as a student starter application.
 """
 
 import argparse
 import csv
+from contextlib import contextmanager
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import StringIO
 from pathlib import Path
-from urllib.parse import parse_qs
 import sys
+from collections.abc import Generator
+from urllib.parse import parse_qs
 
-import numpy as np
 import h5py
-
-from .storage import datasets
+import numpy as np
 from tqdm import tqdm
+
+
+@contextmanager
+def datasets(path: Path) -> Generator[tuple[h5py.Dataset, h5py.Dataset], None, None]:
+    """Open the document IDs and vectors in an HDF5 index."""
+    with h5py.File(path, "r") as index_file:
+        doc_id_dataset = index_file["doc_ids"]
+        vector_dataset = index_file["vectors"]
+        if not isinstance(doc_id_dataset, h5py.Dataset) or not isinstance(
+            vector_dataset, h5py.Dataset
+        ):
+            raise ValueError("Expected 'doc_ids' and 'vectors' datasets in HDF5 file")
+        yield doc_id_dataset, vector_dataset
 
 
 # The benchmark provides full-size embeddings, but this demo intentionally
 # uses only a small prefix so the search implementation stays straightforward.
-DEFAULT_DIMENSIONS = 20
+DEFAULT_DIMENSIONS = 60
 
 
 @dataclass
@@ -53,27 +65,19 @@ class VectorIndex:
         rows, orig_dims = vectors.shape
 
         if orig_dims < dimensions:
-            raise ValueError(
-                f"vectors must contain at least {dimensions} dimensions"
-            )
+            raise ValueError(f"vectors must contain at least {dimensions} dimensions")
 
-        # Pre-allocate lower dimensional
-        index = np.empty((
-            rows,
-            dimensions,
-        ), dtype=np.float64)
-
+        index = np.empty((rows, dimensions), dtype=np.float64)
         index_doc_ids = []
 
-        # Concat vectors + doc_ids
-        for doc_id, vector in tqdm(zip(doc_ids, vectors), file=sys.stdout, total=rows, desc="Indexing", unit="doc"):
+        for doc_id, vector in tqdm(
+            zip(doc_ids, vectors), file=sys.stdout, total=rows, desc="Indexing", unit="doc"
+        ):
             index_doc_ids.append(
                 doc_id.decode() if isinstance(doc_id, bytes) else str(doc_id)
             )
             index[len(index_doc_ids) - 1] = vector[:dimensions]
 
-        # Keeping only a prefix makes this intentionally naive implementation
-        # small and gives students a clear place to try a better index later.
         return VectorIndex(
             index_doc_ids,
             doc_vectors=index,
@@ -81,19 +85,12 @@ class VectorIndex:
         )
 
     def query(self, query_vector: np.ndarray, top_k: int | None = None):
-        """Return ranked document IDs for one query vector.
-
-        Students should customize this method when replacing the baseline
-        search. The baseline uses a brute-force dot product against every
-        indexed document. ``rank`` starts at one for the HTTP response.
-        """
+        """Return ranked document IDs for one query vector."""
         if len(query_vector) < self.dimensions:
             raise ValueError(
                 f"Query vector must contain at least {self.dimensions} dimensions"
             )
 
-        # Both arrays have already been limited to 20 dimensions. A dot
-        # product gives one similarity score for every indexed document.
         scores = self.doc_vectors @ query_vector[: self.dimensions]
         ranked_indexes = np.argsort(-scores, kind="stable")
         if top_k is not None:
@@ -104,16 +101,10 @@ class VectorIndex:
         ]
 
 
-def load_index(
-    index_path: Path, dimensions: int = DEFAULT_DIMENSIONS
-) -> VectorIndex:
-    """Read the HDF5 embeddings and build the student index."""
+def load_index(index_path: Path, dimensions: int = DEFAULT_DIMENSIONS) -> VectorIndex:
+    """Read the HDF5 embeddings and build the search index."""
     with datasets(index_path) as (doc_ids, vectors):
-        return VectorIndex.index(
-            doc_ids,
-            vectors,
-            dimensions=dimensions
-        )
+        return VectorIndex.index(doc_ids, vectors, dimensions=dimensions)
 
 
 def make_query_handler(vector_index: VectorIndex):
@@ -174,7 +165,6 @@ def main(argv=None) -> None:
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
 
     try:
-        # The benchmark waits for this exact line before sending queries.
         print("READY", flush=True)
         server.serve_forever()
     finally:

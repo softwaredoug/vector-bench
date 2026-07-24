@@ -1,0 +1,3 @@
+[flake8]
+banned-modules =
+    vector_bench.* = exps must not depend on vector_bench

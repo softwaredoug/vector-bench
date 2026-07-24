@@ -1,6 +1,6 @@
 import numpy as np
 
-from vector_bench.naive_search import VectorIndex
+from exps.naive_search import VectorIndex
 import h5py
 
 
@@ -14,7 +14,7 @@ def index_of(tmp_path, doc_ids, vectors):
         vectors_dataset = f["vectors"]
         if not isinstance(doc_ids_dataset, h5py.Dataset) or not isinstance(vectors_dataset, h5py.Dataset):
             raise ValueError("Expected 'doc_ids' and 'vectors' datasets in HDF5 file")
-        index = VectorIndex.index(doc_ids_dataset, vectors_dataset)
+        index = VectorIndex.index(doc_ids_dataset, vectors_dataset, dimensions=20)
         return index
 
 

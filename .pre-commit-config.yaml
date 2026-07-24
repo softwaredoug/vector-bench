@@ -16,6 +16,11 @@ repos:
         entry: uv run pytest tests/e2e
         language: system
         pass_filenames: false
+      - id: flake8-exps-boundary
+        name: flake8 exps dependency boundary
+        entry: uv run flake8 --append-config=.flake8-exps
+        language: system
+        files: ^exps/
   - repo: https://github.com/pycqa/flake8
     rev: 7.3.0
     hooks:
