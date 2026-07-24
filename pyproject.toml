@@ -13,7 +13,7 @@ dependencies = [
 [project.scripts]
 vector-bench = "vector_bench.main:main"
 prepare = "vector_bench.prepare:main"
-naive-vector-search = "exps.naive_search:main"
+naive-vector-search = "exps.naive:main"
 
 [dependency-groups]
 dev = [

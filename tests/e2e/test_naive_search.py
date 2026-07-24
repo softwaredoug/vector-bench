@@ -36,7 +36,7 @@ def test_naive_search_indexes_and_queries_embeddings(index_path):
         [
             sys.executable,
             "-c",
-            "from exps import serve; from exps.naive_search import VectorIndex; serve.serve(VectorIndex)",
+            "from exps import serve; from exps.naive import VectorIndex; serve.serve(VectorIndex)",
             "--index",
             str(index_path),
             "--port",
@@ -83,14 +83,13 @@ def test_naive_search_test_mode_queries_corpus_until_interrupted(index_path):
         [
             sys.executable,
             "-c",
-            "from exps.naive_search import main; main()",
+            "from exps.naive import main; main()",
             "--index",
             str(index_path),
             "--dimensions",
             "2",
-            "--test-max-index-size",
+            "--test-index-size",
             "2",
-            "--test",
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -115,7 +114,10 @@ def test_naive_search_test_mode_queries_corpus_until_interrupted(index_path):
         assert any("doc-a" in line or "doc-b" in line for line in output)
         assert not any("doc-c" in line for line in output)
         assert any("query_doc_id=doc-" in line for line in output)
-        assert any("results=[(" in line and "1.0" in line for line in output)
+        assert any(
+            "results=[(" in line and line.count(",") >= 6 for line in output
+        )
+        assert any("0.000707106427633422" in line for line in output)
     finally:
         if process.poll() is None:
             process.terminate()

@@ -179,7 +179,7 @@ Once the search is complete, we terminate the student command line tool and clea
 
 A variety of applications exist in the exps/ folder that hold specific vector search experiments.
 
-One particular is a brute force 'naive_search' useful for e2e testing.
+One particular is a brute force 'naive' useful for e2e testing.
 
 This naive application:
 

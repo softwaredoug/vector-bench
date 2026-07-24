@@ -58,15 +58,18 @@ def test_index(
     index_type: type[Index],
     index_path: Path,
     dimensions: int,
-    max_index_size: int | None = None,
+    index_size: int,
 ) -> None:
     """Continuously query the index with randomly selected corpus vectors."""
     with datasets(index_path) as (doc_ids, vectors):
-        if max_index_size is not None:
-            doc_ids = cast(h5py.Dataset, doc_ids[:max_index_size])
-            vectors = cast(h5py.Dataset, vectors[:max_index_size])
+        doc_ids = cast(h5py.Dataset, doc_ids[:index_size])
+        vectors = cast(h5py.Dataset, vectors[:index_size])
 
         index = index_type.index(doc_ids, vectors, dimensions=dimensions)
+        vectors_by_doc_id = {
+            (doc_id.decode() if isinstance(doc_id, bytes) else str(doc_id)): vector
+            for doc_id, vector in zip(doc_ids, vectors)
+        }
         random_generator = np.random.default_rng()
         query_number = 0
 
@@ -80,9 +83,20 @@ def test_index(
                 if isinstance(query_doc_id, bytes):
                     query_doc_id = query_doc_id.decode()
                 results = index.query(vector, top_k=10)
+                scored_results = []
+                query_norm = np.linalg.norm(vector)
+                for rank, doc_id, score in results:
+                    document_vector = vectors_by_doc_id[doc_id]
+                    document_norm = np.linalg.norm(document_vector)
+                    cosine = (
+                        float(np.dot(vector, document_vector) / (query_norm * document_norm))
+                        if query_norm and document_norm
+                        else 0.0
+                    )
+                    scored_results.append((rank, doc_id, score, cosine))
                 print(
                     f"query={query_number} query_doc_id={query_doc_id} "
-                    f"results={results}",
+                    f"results={scored_results}",
                     flush=True,
                 )
         except KeyboardInterrupt:
@@ -140,25 +154,20 @@ def serve(index_type: type[Index], argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--port", type=int)
     parser.add_argument("--dimensions", type=int, default=60)
     parser.add_argument(
-        "--test",
-        action="store_true",
-        help="continuously query random vectors from the corpus without HTTP",
-    )
-    parser.add_argument(
-        "--test-max-index-size",
+        "--test-index-size",
         type=int,
-        help="index at most this many corpus vectors in --test mode",
+        help="continuously query random vectors from an index of this size",
     )
     args = parser.parse_args(argv)
 
-    if args.test:
-        if args.test_max_index_size is not None and args.test_max_index_size <= 0:
-            parser.error("--test-max-index-size must be greater than zero")
+    if args.test_index_size is not None:
+        if args.test_index_size <= 0:
+            parser.error("--test-index-size must be greater than zero")
         test_index(
             index_type,
             args.index,
             dimensions=args.dimensions,
-            max_index_size=args.test_max_index_size,
+            index_size=args.test_index_size,
         )
         return
     if args.port is None:

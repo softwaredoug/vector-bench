@@ -49,18 +49,13 @@ loads the index, repeatedly searches a randomly selected corpus vector, and
 stops with Ctrl+C:
 
 ```
-naive-vector-search --index corpus.h5 --dimensions 60 --test
+naive-vector-search --index corpus.h5 --dimensions 60 --test-index-size 1000
 ```
 
-Use `--test-max-index-size N` to index only the first `N` corpus vectors while
-debugging:
+`--test-index-size N` indexes only the first `N` corpus vectors while debugging.
+Each result includes the index score and the true full-vector cosine similarity.
 
-```
-naive-vector-search --index corpus.h5 --dimensions 60 --test --test-max-index-size 1000
-```
-
-The same `--test` option is available to other scripts in `exps/` that use the
-shared launcher.
+The option is available to scripts in `exps/` that use the shared launcher.
 
 
 ## Data prep CLI

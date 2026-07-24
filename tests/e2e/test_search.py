@@ -35,7 +35,7 @@ def test_main_searches_student_and_prints_recall_and_latency(
             "--",
             sys.executable,
             "-m",
-            "exps.naive_search",
+            "exps.naive",
         ]
     )
 

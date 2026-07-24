@@ -1,6 +1,6 @@
 import numpy as np
 
-from exps.naive_search import VectorIndex
+from exps.naive import VectorIndex
 import h5py
 
 

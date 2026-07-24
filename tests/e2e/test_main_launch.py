@@ -26,6 +26,6 @@ def test_main_launches_student_command_and_waits_for_ready(tmp_path):
             "--",
             sys.executable,
             "-m",
-            "exps.naive_search",
+            "exps.naive",
         ]
     )
