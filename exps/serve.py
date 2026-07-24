@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import StringIO
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 from urllib.parse import parse_qs
 
 import h5py
@@ -29,7 +29,7 @@ class Index(Protocol):
 
     def query(
         self, query_vector: np.ndarray, top_k: int | None = None
-    ) -> list[tuple[int, str]]:
+    ) -> list[tuple[int, str, float]]:
         ...
 
 
@@ -52,6 +52,41 @@ def load_index(
     """Load HDF5 data and build an index using the supplied class."""
     with datasets(index_path) as (doc_ids, vectors):
         return index_type.index(doc_ids, vectors, dimensions=dimensions)
+
+
+def test_index(
+    index_type: type[Index],
+    index_path: Path,
+    dimensions: int,
+    max_index_size: int | None = None,
+) -> None:
+    """Continuously query the index with randomly selected corpus vectors."""
+    with datasets(index_path) as (doc_ids, vectors):
+        if max_index_size is not None:
+            doc_ids = cast(h5py.Dataset, doc_ids[:max_index_size])
+            vectors = cast(h5py.Dataset, vectors[:max_index_size])
+
+        index = index_type.index(doc_ids, vectors, dimensions=dimensions)
+        random_generator = np.random.default_rng()
+        query_number = 0
+
+        print("TEST MODE: press Ctrl+C to stop", flush=True)
+        try:
+            while True:
+                query_number += 1
+                vector_index = random_generator.integers(len(vectors))
+                vector = vectors[vector_index]
+                query_doc_id = doc_ids[vector_index]
+                if isinstance(query_doc_id, bytes):
+                    query_doc_id = query_doc_id.decode()
+                results = index.query(vector, top_k=10)
+                print(
+                    f"query={query_number} query_doc_id={query_doc_id} "
+                    f"results={results}",
+                    flush=True,
+                )
+        except KeyboardInterrupt:
+            print("Test mode stopped", flush=True)
 
 
 def make_query_handler(index: Index):
@@ -85,7 +120,7 @@ def make_query_handler(index: Index):
 
             output = StringIO()
             writer = csv.writer(output, lineterminator="\n")
-            for rank, doc_id in index.query(query_vector):
+            for rank, doc_id, _score in index.query(query_vector):
                 writer.writerow([rank, query_id, doc_id])
 
             response = output.getvalue().encode()
@@ -102,9 +137,32 @@ def serve(index_type: type[Index], argv: Sequence[str] | None = None) -> None:
     """Load an index class, start its HTTP server, and serve query requests."""
     parser = argparse.ArgumentParser(prog="naive-vector-search")
     parser.add_argument("--index", type=Path, required=True)
-    parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--port", type=int)
     parser.add_argument("--dimensions", type=int, default=60)
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="continuously query random vectors from the corpus without HTTP",
+    )
+    parser.add_argument(
+        "--test-max-index-size",
+        type=int,
+        help="index at most this many corpus vectors in --test mode",
+    )
     args = parser.parse_args(argv)
+
+    if args.test:
+        if args.test_max_index_size is not None and args.test_max_index_size <= 0:
+            parser.error("--test-max-index-size must be greater than zero")
+        test_index(
+            index_type,
+            args.index,
+            dimensions=args.dimensions,
+            max_index_size=args.test_max_index_size,
+        )
+        return
+    if args.port is None:
+        parser.error("the following arguments are required: --port")
 
     index = load_index(index_type, args.index, dimensions=args.dimensions)
     print("Inedx loaded")

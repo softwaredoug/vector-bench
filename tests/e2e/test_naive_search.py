@@ -1,3 +1,5 @@
+import os
+import signal
 import subprocess
 import sys
 from urllib.parse import urlencode
@@ -74,3 +76,47 @@ def test_naive_search_indexes_and_queries_embeddings(index_path):
     finally:
         process.terminate()
         process.wait(timeout=5)
+
+
+def test_naive_search_test_mode_queries_corpus_until_interrupted(index_path):
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "from exps.naive_search import main; main()",
+            "--index",
+            str(index_path),
+            "--dimensions",
+            "2",
+            "--test-max-index-size",
+            "2",
+            "--test",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    try:
+        assert process.stdout is not None
+        output = []
+        while not any("TEST MODE" in line for line in output):
+            line = process.stdout.readline()
+            assert line, process.stderr.read() if process.stderr else ""
+            output.append(line)
+        while not any("doc-" in line for line in output):
+            line = process.stdout.readline()
+            assert line, process.stderr.read() if process.stderr else ""
+            output.append(line)
+        os.kill(process.pid, signal.SIGINT)
+        output.extend(process.communicate(timeout=5)[0].splitlines(keepends=True))
+
+        assert process.returncode == 0
+        assert any("doc-a" in line or "doc-b" in line for line in output)
+        assert not any("doc-c" in line for line in output)
+        assert any("query_doc_id=doc-" in line for line in output)
+        assert any("results=[(" in line and "1.0" in line for line in output)
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=5)

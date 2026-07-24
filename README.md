@@ -44,6 +44,24 @@ Optionally the vector can be appended, and will be ignored in evaluation.
 
 There's a silly CLI in this repo that does brute-force vector search to implement these requirements.
 
+For local experiments, the demo scripts also support a non-HTTP test loop. It
+loads the index, repeatedly searches a randomly selected corpus vector, and
+stops with Ctrl+C:
+
+```
+naive-vector-search --index corpus.h5 --dimensions 60 --test
+```
+
+Use `--test-max-index-size N` to index only the first `N` corpus vectors while
+debugging:
+
+```
+naive-vector-search --index corpus.h5 --dimensions 60 --test --test-max-index-size 1000
+```
+
+The same `--test` option is available to other scripts in `exps/` that use the
+shared launcher.
+
 
 ## Data prep CLI
 

@@ -56,7 +56,7 @@ class VectorIndex:
         )
 
     def query(self, query_vector: np.ndarray, top_k: int | None = None):
-        """Return ranked document IDs for one query vector."""
+        """Return ranked document IDs and scores for one query vector."""
         if len(query_vector) < self.dimensions:
             raise ValueError(
                 f"Query vector must contain at least {self.dimensions} dimensions"
@@ -67,7 +67,11 @@ class VectorIndex:
         if top_k is not None:
             ranked_indexes = ranked_indexes[:top_k]
         return [
-            (rank, self.doc_ids[int(document_index)])
+            (
+                rank,
+                self.doc_ids[int(document_index)],
+                float(scores[int(document_index)]),
+            )
             for rank, document_index in enumerate(ranked_indexes, start=1)
         ]
 

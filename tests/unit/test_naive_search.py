@@ -42,4 +42,8 @@ def test_query_returns_documents_in_dot_product_order(tmp_path):
 
     index = index_of(tmp_path, doc_ids, vectors)
     results = index.query(np.array([1, 1] + [0] * 18))
-    assert results == [(1, "doc-b"), (2, "doc-a"), (3, "doc-c")]
+    assert results == [
+        (1, "doc-b", 2.0),
+        (2, "doc-a", 1.0),
+        (3, "doc-c", 0.0),
+    ]
