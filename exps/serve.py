@@ -13,6 +13,8 @@ from urllib.parse import parse_qs
 import h5py
 import numpy as np
 
+MAX_TOP_K = 50
+
 
 class Index(Protocol):
     """Interface required by the standalone search server."""
@@ -123,6 +125,9 @@ def make_query_handler(index: Index):
                     [float(value) for value in fields["vector"][0].split(",")],
                     dtype=np.float64,
                 )
+                top_k = min(int(fields.get("top_k", [MAX_TOP_K])[0]), MAX_TOP_K)
+                if top_k <= 0:
+                    raise ValueError("top_k must be greater than zero")
                 if len(query_vector) < index.dimensions:
                     raise ValueError(
                         "Query vector must contain at least "
@@ -134,7 +139,7 @@ def make_query_handler(index: Index):
 
             output = StringIO()
             writer = csv.writer(output, lineterminator="\n")
-            for rank, doc_id, _score in index.query(query_vector):
+            for rank, doc_id, _score in index.query(query_vector, top_k=top_k):
                 writer.writerow([rank, query_id, doc_id])
 
             response = output.getvalue().encode()

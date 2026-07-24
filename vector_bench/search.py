@@ -14,6 +14,8 @@ import numpy as np
 
 from .runner import StudentProcess
 
+MAX_TOP_K = 50
+
 
 def search(
     student: StudentProcess,
@@ -26,13 +28,16 @@ def search(
     """Run all judged queries and print per-query and average metrics."""
     if top_k <= 0:
         raise ValueError("top_k must be greater than zero")
+    top_k = min(top_k, MAX_TOP_K)
     if len(query_ids) != len(query_vectors):
         raise ValueError("Query IDs and vectors must have the same length")
 
     results = []
     for query_id, query_vector in zip(query_ids, query_vectors):
         started = perf_counter()
-        retrieved_doc_ids = _post_query(student.port, query_id, query_vector)
+        retrieved_doc_ids = _post_query(
+            student.port, query_id, query_vector, top_k=top_k
+        )
         latency = perf_counter() - started
         expected_doc_ids = ground_truth.get(str(query_id), [])[:top_k]
         retrieved_doc_ids = retrieved_doc_ids[:top_k]
@@ -48,12 +53,15 @@ def search(
     print(f",{average_latency},{average_recall}", file=stream)
 
 
-def _post_query(port: int, query_id: str, query_vector: np.ndarray) -> list[str]:
+def _post_query(
+    port: int, query_id: str, query_vector: np.ndarray, top_k: int
+) -> list[str]:
     """POST one form-encoded query and parse returned document IDs."""
     body = urlencode(
         {
             "query_id": query_id,
             "vector": ",".join(str(value) for value in query_vector),
+            "top_k": str(top_k),
         }
     ).encode()
     request = Request(

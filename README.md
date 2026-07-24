@@ -29,6 +29,9 @@ POST http://localhost:1234/query
 query_id=<query_id>&vector=<comma_seperated_vector>
 ```
 
+The optional `top_k` form field limits the response to that many rows, up to a
+maximum of 50. If omitted, the server returns 50 rows.
+
 The result:
 
 CSV of 

@@ -18,7 +18,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="vector-bench")
     parser.add_argument("--index", type=Path, required=True)
     parser.add_argument("--queries", type=Path, required=True)
-    parser.add_argument("--top-k", type=int, default=1000)
+    parser.add_argument("--top-k", type=int, default=50)
     parser.add_argument("student_command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     if args.student_command and args.student_command[0] == "--":

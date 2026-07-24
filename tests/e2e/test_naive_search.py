@@ -61,7 +61,11 @@ def test_naive_search_indexes_and_queries_embeddings(index_path):
         request = Request(
             f"http://127.0.0.1:{port}/query",
             data=urlencode(
-                {"query_id": "q1", "vector": ",".join(["1", "1"] + ["0"] * 20)}
+                {
+                    "query_id": "q1",
+                    "vector": ",".join(["1", "1"] + ["0"] * 20),
+                    "top_k": "2",
+                }
             ).encode(),
             method="POST",
         )
@@ -71,7 +75,6 @@ def test_naive_search_indexes_and_queries_embeddings(index_path):
         assert result == [
             "1,q1,doc-b",
             "2,q1,doc-a",
-            "3,q1,doc-c",
         ]
     finally:
         process.terminate()

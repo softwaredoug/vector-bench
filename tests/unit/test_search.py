@@ -30,6 +30,7 @@ def test_search_prints_query_and_average_metrics(mock_post_query):
     call_args = mock_post_query.call_args.args
     assert call_args[:2] == (1234, "q1")
     np.testing.assert_array_equal(call_args[2], np.array([1, 2]))
+    assert mock_post_query.call_args.kwargs["top_k"] == 2
 
 
 def test_search_rejects_mismatched_query_ids_and_vectors():
