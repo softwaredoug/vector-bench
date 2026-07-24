@@ -34,7 +34,7 @@ def test_naive_search_indexes_and_queries_embeddings(index_path):
         [
             sys.executable,
             "-c",
-            "from exps.naive_search import main; main()",
+            "from exps import serve; from exps.naive_search import VectorIndex; serve.serve(VectorIndex)",
             "--index",
             str(index_path),
             "--port",
