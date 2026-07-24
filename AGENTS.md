@@ -175,13 +175,15 @@ With final line average:
 Once the search is complete, we terminate the student command line tool and cleanup any temporary files.
 
 
-## Naive vector search application for test and scaffolding
+## Existing experiments + naive vector search for e2e testing
 
-For testing, we should create a simple, naive search application that uses brute-force numpy.
+A variety of applications exist in the exps/ folder that hold specific vector search experiments.
 
-This application should
+One particular is a brute force 'naive_search' useful for e2e testing.
 
-- Use only the first N=20 dimensions provided
+This naive application:
+
+- Uses only the first N=60 dimensions provided
 - Store a numpy array in memory
 - Use dot product between the query-document when querying
 
