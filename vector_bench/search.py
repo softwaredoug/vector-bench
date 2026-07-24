@@ -33,6 +33,9 @@ def search(
         raise ValueError("Query IDs and vectors must have the same length")
 
     results = []
+    total_recall = 0
+    total_latency = 0
+    num_queries_run = 0
     for query_id, query_vector in zip(query_ids, query_vectors):
         started = perf_counter()
         retrieved_doc_ids = _post_query(
@@ -42,10 +45,20 @@ def search(
         expected_doc_ids = ground_truth.get(str(query_id), [])[:top_k]
         retrieved_doc_ids = retrieved_doc_ids[:top_k]
         recall = _recall(retrieved_doc_ids, expected_doc_ids)
+
+        total_recall += recall
+        total_latency += latency
+        num_queries_run += 1
+        avg_recall = total_recall / num_queries_run
+        avg_latency = total_latency / num_queries_run
+
+        print(f"{num_queries_run} -- Query {query_id}: latency={latency:.6f}s ({avg_latency:.6f}s), recall={recall:.4f} ({avg_recall:.4f})", file=sys.stderr)
         results.append((query_id, latency, recall))
 
     stream = output or sys.stdout
     for query_id, latency, recall in results:
+        total_recall += recall
+        total_latency += latency
         print(f"{query_id},{latency},{recall}", file=stream)
 
     average_latency = sum(result[1] for result in results) / len(results)

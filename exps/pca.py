@@ -15,7 +15,7 @@ from .serve import serve
 DEFAULT_DIMENSIONS = 60
 
 # Number of samples to PCA
-NUM_SAMPLES = 10_000
+NUM_SAMPLES = 100_000
 
 
 def pca(X: np.ndarray, n_components: int) -> tuple[np.ndarray, np.ndarray]:
@@ -67,7 +67,7 @@ class PCAVectorIndex:
         for doc_id, vector in tqdm(
             zip(doc_ids, vectors), file=sys.stdout, total=rows, desc="Indexing", unit="doc"
         ):
-            transformed = (vector - means) @ pca_eigens
+            transformed = vector @ pca_eigens
             index_doc_ids.append(
                 doc_id.decode() if isinstance(doc_id, bytes) else str(doc_id)
             )
@@ -88,7 +88,7 @@ class PCAVectorIndex:
                 f"Query vector must contain at least {self.dimensions} dimensions"
             )
 
-        transformed = (query_vector - self.means) @ self.pca_eigens
+        transformed = query_vector @ self.pca_eigens
 
         scores = self.doc_vectors @ transformed
         ranked_indexes = np.argsort(-scores, kind="stable")
