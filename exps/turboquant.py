@@ -1,4 +1,5 @@
-"""A deliberately simple brute-force vector search application performing PCA."""
+"""A deliberately simple brute-force vector search application performing a random rotation (turboquant)."""
+
 
 from dataclasses import dataclass
 import sys
@@ -18,29 +19,21 @@ DEFAULT_DIMENSIONS = 60
 NUM_SAMPLES = 100_000
 
 
-def pca(X: np.ndarray, n_components: int) -> tuple[np.ndarray, np.ndarray]:
+def random_rotation(dims: int) -> np.ndarray:
     """Perform Principal Component Analysis to reduce the dimensions of the vector."""
-    mean = X.mean(axis=0)
-    centered = X - mean
-
-    # How each dimension varies with every other dimension
-    covariance = np.cov(centered, rowvar=False)
-    eigenvalues, eigenvectors = np.linalg.eigh(covariance)
-    order = np.argsort(eigenvalues)[::-1]
-    eigenvalues = eigenvalues[order]
-    eigenvectors = eigenvectors[:, order]
-
-    return eigenvectors[:, :n_components], mean
+    # Generate a random orthogonal matrix using QR decomposition
+    random_matrix = np.random.randn(dims, dims)
+    q, _ = np.linalg.qr(random_matrix)
+    return q
 
 
 @dataclass
-class PCAVectorIndex:
+class TurboQuantIndex:
     """The in-memory document IDs and vectors used by the search server."""
 
     doc_ids: list[str]
     doc_vectors: np.ndarray
-    pca_eigens: np.ndarray
-    means: np.ndarray
+    rotation: np.ndarray
     dimensions: int
 
     @staticmethod
@@ -48,37 +41,33 @@ class PCAVectorIndex:
         doc_ids: h5py.Dataset,
         vectors: h5py.Dataset,
         dimensions: int = DEFAULT_DIMENSIONS,
-    ) -> "PCAVectorIndex":
+    ) -> "TurboQuantIndex":
         """Build an index from original document vectors."""
-        if dimensions <= 0:
-            raise ValueError("dimensions must be greater than zero")
-
         rows, orig_dims = vectors.shape
+        dimensions = orig_dims
 
         if orig_dims < dimensions:
             raise ValueError(f"vectors must contain at least {dimensions} dimensions")
 
-        pca_matrix = vectors[:NUM_SAMPLES]
-        pca_eigens, means = pca(pca_matrix, dimensions)
+        rotation = random_rotation(orig_dims)
 
-        pca_index = np.empty((rows, dimensions), dtype=np.float64)
+        rot_index = np.empty((rows, dimensions), dtype=np.float64)
         index_doc_ids = []
 
         for doc_id, vector in tqdm(
             zip(doc_ids, vectors), file=sys.stdout, total=rows, desc="Indexing", unit="doc"
         ):
-            transformed = vector @ pca_eigens
+            transformed = vector @ rotation
             index_doc_ids.append(
                 doc_id.decode() if isinstance(doc_id, bytes) else str(doc_id)
             )
-            pca_index[len(index_doc_ids) - 1] = transformed
+            rot_index[len(index_doc_ids) - 1] = transformed
 
-        return PCAVectorIndex(
+        return TurboQuantIndex(
             index_doc_ids,
-            doc_vectors=pca_index,
-            dimensions=dimensions,
-            pca_eigens=pca_eigens,
-            means=means
+            doc_vectors=rot_index,
+            rotation=rotation,
+            dimensions=dimensions
         )
 
     def query(self, query_vector: np.ndarray, top_k: int | None = None):
@@ -88,7 +77,7 @@ class PCAVectorIndex:
                 f"Query vector must contain at least {self.dimensions} dimensions"
             )
 
-        transformed = query_vector @ self.pca_eigens
+        transformed = query_vector @ self.rotation
 
         scores = self.doc_vectors @ transformed
         ranked_indexes = np.argsort(-scores, kind="stable")
@@ -106,7 +95,7 @@ class PCAVectorIndex:
 
 def main(argv=None) -> None:
     """Run the naive index with the shared standalone server."""
-    serve(PCAVectorIndex, argv)
+    serve(TurboQuantIndex, argv)
 
 
 if __name__ == "__main__":
