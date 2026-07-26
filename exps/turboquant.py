@@ -11,7 +11,7 @@ import h5py
 import numpy as np
 from tqdm import tqdm
 
-from .isotropy import graph_coords, graph_eigen
+from .isotropy import buffered_limits, coordinate_variances, graph_coords, graph_eigen
 from .serve import serve
 
 
@@ -58,10 +58,18 @@ class TurboQuantIndex:
 
         if TurboQuantIndex.graph_isotropy:
             sample = vectors[: min(NUM_SAMPLES, rows)]
-            graph_coords(sample, "graph_coord_before.png")
-            graph_eigen(sample, "graph_eigen_before.png")
             rotated_sample = sample @ rotation
-            graph_coords(rotated_sample, "graph_coord_after.png")
+            coordinate_values = np.concatenate(
+                [coordinate_variances(sample), coordinate_variances(rotated_sample)]
+            )
+            coordinate_limits = buffered_limits(coordinate_values)
+            graph_coords(
+                sample, "graph_coord_before.png", y_limits=coordinate_limits
+            )
+            graph_eigen(sample, "graph_eigen_before.png")
+            graph_coords(
+                rotated_sample, "graph_coord_after.png", y_limits=coordinate_limits
+            )
             graph_eigen(rotated_sample, "graph_eigen_after.png")
 
         rot_index = np.empty((rows, dimensions), dtype=np.float64)
