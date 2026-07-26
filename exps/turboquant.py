@@ -2,12 +2,16 @@
 
 
 from dataclasses import dataclass
+import argparse
 import sys
+from collections.abc import Sequence
+from typing import ClassVar
 
 import h5py
 import numpy as np
 from tqdm import tqdm
 
+from .isotropy import graph_coords, graph_eigen
 from .serve import serve
 
 
@@ -15,8 +19,8 @@ from .serve import serve
 # uses only a small prefix so the search implementation stays straightforward.
 DEFAULT_DIMENSIONS = 60
 
-# Number of samples to PCA
-NUM_SAMPLES = 100_000
+# Number of vectors sampled for isotropy graphs
+NUM_SAMPLES = 10_000
 
 
 def random_rotation(dims: int) -> np.ndarray:
@@ -35,6 +39,7 @@ class TurboQuantIndex:
     doc_vectors: np.ndarray
     rotation: np.ndarray
     dimensions: int
+    graph_isotropy: ClassVar[bool] = False
 
     @staticmethod
     def index(
@@ -50,6 +55,14 @@ class TurboQuantIndex:
             raise ValueError(f"vectors must contain at least {dimensions} dimensions")
 
         rotation = random_rotation(orig_dims)
+
+        if TurboQuantIndex.graph_isotropy:
+            sample = vectors[: min(NUM_SAMPLES, rows)]
+            graph_coords(sample, "graph_coord_before.png")
+            graph_eigen(sample, "graph_eigen_before.png")
+            rotated_sample = sample @ rotation
+            graph_coords(rotated_sample, "graph_coord_after.png")
+            graph_eigen(rotated_sample, "graph_eigen_after.png")
 
         rot_index = np.empty((rows, dimensions), dtype=np.float64)
         index_doc_ids = []
@@ -93,9 +106,13 @@ class TurboQuantIndex:
         ]
 
 
-def main(argv=None) -> None:
-    """Run the naive index with the shared standalone server."""
-    serve(TurboQuantIndex, argv)
+def main(argv: Sequence[str] | None = None) -> None:
+    """Run TurboQuant with the shared standalone server."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--graph-isotropy", action="store_true")
+    args, serve_argv = parser.parse_known_args(argv)
+    TurboQuantIndex.graph_isotropy = args.graph_isotropy
+    serve(TurboQuantIndex, serve_argv)
 
 
 if __name__ == "__main__":
