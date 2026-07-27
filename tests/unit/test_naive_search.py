@@ -47,3 +47,14 @@ def test_query_returns_documents_in_dot_product_order(tmp_path):
         (2, "doc-a", 1.0),
         (3, "doc-c", 0.0),
     ]
+
+
+def test_query_defaults_to_50_results(tmp_path):
+    doc_ids = [f"doc-{number}" for number in range(51)]
+    vectors = np.eye(51, 20, dtype=np.float32)
+
+    index = index_of(tmp_path, doc_ids, vectors)
+
+    results = index.query(np.ones(20, dtype=np.float32))
+
+    assert len(results) == 50

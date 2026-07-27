@@ -30,7 +30,7 @@ class Index(Protocol):
         ...
 
     def query(
-        self, query_vector: np.ndarray, top_k: int | None = None
+        self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K
     ) -> list[tuple[int, str, float]]:
         ...
 
@@ -84,7 +84,7 @@ def test_index(
                 query_doc_id = doc_ids[vector_index]
                 if isinstance(query_doc_id, bytes):
                     query_doc_id = query_doc_id.decode()
-                results = index.query(vector, top_k=10)
+                results = index.query(vector, top_k=MAX_TOP_K)
                 scored_results = []
                 query_norm = np.linalg.norm(vector)
                 for rank, doc_id, score in results:

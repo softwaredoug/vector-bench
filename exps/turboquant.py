@@ -12,7 +12,7 @@ import numpy as np
 from tqdm import tqdm
 
 from .isotropy import buffered_limits, coordinate_variances, graph_coords, graph_eigen
-from .serve import serve
+from .serve import MAX_TOP_K, serve
 
 
 # The benchmark provides full-size embeddings, but this demo intentionally
@@ -36,7 +36,8 @@ class TurboQuantIndex:
     """The in-memory document IDs and vectors used by the search server."""
 
     doc_ids: list[str]
-    doc_vectors: np.ndarray
+    packed_index: np.ndarray
+    means: np.ndarray
     rotation: np.ndarray
     dimensions: int
     graph_isotropy: ClassVar[bool] = False
@@ -54,6 +55,7 @@ class TurboQuantIndex:
         if orig_dims < dimensions:
             raise ValueError(f"vectors must contain at least {dimensions} dimensions")
 
+        means = np.asarray(vectors).mean(axis=0)
         rotation = random_rotation(orig_dims)
 
         if TurboQuantIndex.graph_isotropy:
@@ -72,43 +74,47 @@ class TurboQuantIndex:
             )
             graph_eigen(rotated_sample, "graph_eigen_after.png")
 
-        rot_index = np.empty((rows, dimensions), dtype=np.float64)
+        packed_index = []
         index_doc_ids = []
 
         for doc_id, vector in tqdm(
             zip(doc_ids, vectors), file=sys.stdout, total=rows, desc="Indexing", unit="doc"
         ):
-            transformed = vector @ rotation
+            transformed = (vector - means) @ rotation
+            packed_index.append(np.packbits(transformed >= 0))
             index_doc_ids.append(
                 doc_id.decode() if isinstance(doc_id, bytes) else str(doc_id)
             )
-            rot_index[len(index_doc_ids) - 1] = transformed
 
         return TurboQuantIndex(
             index_doc_ids,
-            doc_vectors=rot_index,
+            packed_index=np.stack(packed_index, axis=0),
+            means=means,
             rotation=rotation,
             dimensions=dimensions
         )
 
-    def query(self, query_vector: np.ndarray, top_k: int | None = None):
+    def query(self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K):
         """Return ranked document IDs and scores for one query vector."""
         if len(query_vector) < self.dimensions:
             raise ValueError(
                 f"Query vector must contain at least {self.dimensions} dimensions"
             )
 
-        transformed = query_vector @ self.rotation
+        transformed = (query_vector[: len(self.means)] - self.means) @ self.rotation
+        packed_query = np.packbits(transformed >= 0)
 
-        scores = self.doc_vectors @ transformed
-        ranked_indexes = np.argsort(-scores, kind="stable")
+        distances = np.bitwise_count(
+            np.bitwise_xor(self.packed_index, packed_query)
+        ).sum(axis=1)
+        ranked_indexes = np.argsort(distances, kind="stable")
         if top_k is not None:
             ranked_indexes = ranked_indexes[:top_k]
         return [
             (
                 rank,
                 self.doc_ids[int(document_index)],
-                float(scores[int(document_index)]),
+                float(distances[int(document_index)]),
             )
             for rank, document_index in enumerate(ranked_indexes, start=1)
         ]

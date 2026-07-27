@@ -7,7 +7,7 @@ import h5py
 import numpy as np
 from tqdm import tqdm
 
-from .serve import serve
+from .serve import MAX_TOP_K, serve
 
 
 # The benchmark provides full-size embeddings, but this demo intentionally
@@ -55,7 +55,7 @@ class VectorIndex:
             dimensions=dimensions,
         )
 
-    def query(self, query_vector: np.ndarray, top_k: int | None = None):
+    def query(self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K):
         """Return ranked document IDs and scores for one query vector."""
         if len(query_vector) < self.dimensions:
             raise ValueError(

@@ -19,6 +19,7 @@ class BinaryQuantVectorIndex:
 
     doc_ids: list[str]
     packed_index: np.ndarray
+    means: np.ndarray
     dimensions: int
 
     @staticmethod
@@ -33,13 +34,14 @@ class BinaryQuantVectorIndex:
         if orig_dims < dimensions:
             raise ValueError(f"vectors must contain at least {dimensions} dimensions")
 
+        means = np.asarray(vectors).mean(axis=0)
         all_packed = []
         index_doc_ids = []
 
         for doc_id, vector in tqdm(
             zip(doc_ids, vectors), file=sys.stdout, total=rows, desc="Indexing", unit="doc"
         ):
-            transformed = vector >= 0
+            transformed = vector - means >= 0
             transformed = transformed.astype(np.uint8)
             packed = np.packbits(transformed)
             index_doc_ids.append(
@@ -51,12 +53,13 @@ class BinaryQuantVectorIndex:
         return BinaryQuantVectorIndex(
             index_doc_ids,
             packed_index=all_packed,
+            means=means,
             dimensions=dimensions
         )
 
     def query(self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K):
         """Return ranked document IDs and scores for one query vector."""
-        transformed = query_vector >= 0
+        transformed = query_vector[: len(self.means)] - self.means >= 0
         packed = np.packbits(transformed.astype(np.uint8))
         # XOR + hamming
         xord = np.bitwise_xor(self.packed_index, packed)
