@@ -31,6 +31,11 @@ def random_rotation(dims: int) -> np.ndarray:
     return q
 
 
+class ProductQuantization:
+
+    codebooks: list[np.ndarray]
+
+
 @dataclass
 class TurboQuantIndex:
     """The in-memory document IDs and vectors used by the search server."""
@@ -55,7 +60,6 @@ class TurboQuantIndex:
         if orig_dims < dimensions:
             raise ValueError(f"vectors must contain at least {dimensions} dimensions")
 
-        means = np.asarray(vectors).mean(axis=0)
         rotation = random_rotation(orig_dims)
 
         if TurboQuantIndex.graph_isotropy:
@@ -74,21 +78,26 @@ class TurboQuantIndex:
             )
             graph_eigen(rotated_sample, "graph_eigen_after.png")
 
-        packed_index = []
+        rotated_vectors = np.empty((rows, orig_dims), dtype=np.float64)
+        means = np.zeros(orig_dims, dtype=np.float64)
         index_doc_ids = []
 
-        for doc_id, vector in tqdm(
+        for row, (doc_id, vector) in enumerate(tqdm(
             zip(doc_ids, vectors), file=sys.stdout, total=rows, desc="Indexing", unit="doc"
-        ):
-            transformed = (vector - means) @ rotation
-            packed_index.append(np.packbits(transformed >= 0))
+        )):
+            transformed = vector @ rotation
+            rotated_vectors[row] = transformed
+            means += transformed
             index_doc_ids.append(
                 doc_id.decode() if isinstance(doc_id, bytes) else str(doc_id)
             )
 
+        means /= rows
+        packed_index = np.packbits(rotated_vectors >= means, axis=1)
+
         return TurboQuantIndex(
             index_doc_ids,
-            packed_index=np.stack(packed_index, axis=0),
+            packed_index=packed_index,
             means=means,
             rotation=rotation,
             dimensions=dimensions
@@ -101,7 +110,7 @@ class TurboQuantIndex:
                 f"Query vector must contain at least {self.dimensions} dimensions"
             )
 
-        transformed = (query_vector[: len(self.means)] - self.means) @ self.rotation
+        transformed = query_vector[: len(self.means)] @ self.rotation - self.means
         packed_query = np.packbits(transformed >= 0)
 
         distances = np.bitwise_count(
