@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence
 from time import perf_counter
 from typing import TextIO
@@ -24,10 +25,13 @@ def search(
     ground_truth: dict[str, list[str]],
     top_k: int,
     output: TextIO | None = None,
+    concurrency: int = 1,
 ) -> None:
     """Run all judged queries and print per-query and average metrics."""
     if top_k <= 0:
         raise ValueError("top_k must be greater than zero")
+    if concurrency <= 0:
+        raise ValueError("concurrency must be greater than zero")
     top_k = min(top_k, MAX_TOP_K)
     if len(query_ids) != len(query_vectors):
         raise ValueError("Query IDs and vectors must have the same length")
@@ -36,24 +40,37 @@ def search(
     total_recall = 0
     total_latency = 0
     num_queries_run = 0
-    for query_id, query_vector in zip(query_ids, query_vectors):
-        started = perf_counter()
-        retrieved_doc_ids = _post_query(
-            student.port, query_id, query_vector, top_k=top_k
-        )
-        latency = perf_counter() - started
-        expected_doc_ids = ground_truth.get(str(query_id), [])[:top_k]
-        retrieved_doc_ids = retrieved_doc_ids[:top_k]
-        recall = _recall(retrieved_doc_ids, expected_doc_ids)
+    benchmark_started = perf_counter()
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [
+            executor.submit(
+                _query,
+                student.port,
+                query_id,
+                query_vector,
+                ground_truth.get(str(query_id), [])[:top_k],
+                top_k,
+            )
+            for query_id, query_vector in zip(query_ids, query_vectors)
+        ]
+        for future in futures:
+            query_id, latency, recall = future.result()
 
-        total_recall += recall
-        total_latency += latency
-        num_queries_run += 1
-        avg_recall = total_recall / num_queries_run
-        avg_latency = total_latency / num_queries_run
+            total_recall += recall
+            total_latency += latency
+            num_queries_run += 1
+            avg_recall = total_recall / num_queries_run
+            avg_latency = total_latency / num_queries_run
+            elapsed = perf_counter() - benchmark_started
+            qps = num_queries_run / elapsed if elapsed else 0.0
 
-        print(f"{num_queries_run} -- Query {query_id}: latency={latency:.6f}s ({avg_latency:.6f}s), recall={recall:.4f} ({avg_recall:.4f})", file=sys.stderr)
-        results.append((query_id, latency, recall))
+            print(
+                f"{num_queries_run} -- Query {query_id}: "
+                f"latency={latency:.6f}s ({avg_latency:.6f}s), "
+                f"qps={qps:.2f}, recall={recall:.4f} ({avg_recall:.4f})",
+                file=sys.stderr,
+            )
+            results.append((query_id, latency, recall))
 
     stream = output or sys.stdout
     for query_id, latency, recall in results:
@@ -64,6 +81,21 @@ def search(
     average_latency = sum(result[1] for result in results) / len(results)
     average_recall = sum(result[2] for result in results) / len(results)
     print(f",{average_latency},{average_recall}", file=stream)
+
+
+def _query(
+    port: int,
+    query_id: str,
+    query_vector: np.ndarray,
+    expected_doc_ids: Sequence[str],
+    top_k: int,
+) -> tuple[str, float, float]:
+    """Run one query and calculate its latency and recall."""
+    started = perf_counter()
+    retrieved_doc_ids = _post_query(port, query_id, query_vector, top_k=top_k)
+    latency = perf_counter() - started
+    recall = _recall(retrieved_doc_ids[:top_k], expected_doc_ids)
+    return query_id, latency, recall
 
 
 def _post_query(

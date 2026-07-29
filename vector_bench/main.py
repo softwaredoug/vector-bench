@@ -19,12 +19,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--index", type=Path, required=True)
     parser.add_argument("--queries", type=Path, required=True)
     parser.add_argument("--top-k", type=int, default=50)
+    parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("student_command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     if args.student_command and args.student_command[0] == "--":
         args.student_command = args.student_command[1:]
     if not args.student_command:
         parser.error("a student command is required after --")
+    if args.concurrency <= 0:
+        parser.error("--concurrency must be greater than zero")
 
     query_ids, query_vectors, ground_truth = load_queries(args.queries)
     with launch_student(args.student_command, args.index) as student:
@@ -34,6 +37,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             query_vectors,
             ground_truth,
             top_k=args.top_k,
+            concurrency=args.concurrency,
         )
 
 

@@ -45,6 +45,8 @@ def test_benchmark_main_replays_prepared_files(tmp_path, monkeypatch, capsys):
             str(queries_path),
             "--top-k",
             "5",
+            "--concurrency",
+            "2",
             "--",
             sys.executable,
             "-m",
@@ -52,8 +54,12 @@ def test_benchmark_main_replays_prepared_files(tmp_path, monkeypatch, capsys):
         ]
     )
 
-    output = capsys.readouterr().out.splitlines()
+    captured = capsys.readouterr()
+    output = captured.out.splitlines()
     metrics = output[-11:]
     assert len(metrics) == 11
     assert metrics[-1].startswith(",")
     assert all(len(row.split(",")) == 3 for row in metrics)
+    query_logs = [line for line in captured.err.splitlines() if "Query " in line]
+    assert len(query_logs) == 10
+    assert all("qps=" in line for line in query_logs)
