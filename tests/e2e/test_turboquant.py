@@ -11,7 +11,7 @@ import numpy as np
 
 def test_turboquant_graphs_isotropy_before_and_after_rotation(tmp_path):
     index_path = tmp_path / "embeddings.h5"
-    vectors = np.arange(24, dtype=np.float64).reshape(6, 4)
+    vectors = np.arange(24, dtype=np.float32).reshape(6, 4)
     with h5py.File(index_path, "w") as index_file:
         index_file.create_dataset(
             "doc_ids", data=[f"doc-{number}".encode() for number in range(len(vectors))]
@@ -25,8 +25,6 @@ def test_turboquant_graphs_isotropy_before_and_after_rotation(tmp_path):
             "from exps.turboquant import main; main()",
             "--index",
             str(index_path),
-            "--dimensions",
-            "4",
             "--test-index-size",
             "2",
             "--graph-isotropy",
@@ -64,7 +62,7 @@ def test_turboquant_graphs_isotropy_before_and_after_rotation(tmp_path):
 
 def test_turboquant_queries_with_rotated_binary_vectors(tmp_path):
     index_path = tmp_path / "embeddings.h5"
-    vectors = np.array([[10, 10, 10, 10], [11, 11, 11, 11]], dtype=np.float64)
+    vectors = np.array([[10, 10, 10, 10], [11, 11, 11, 11]], dtype=np.float32)
     with h5py.File(index_path, "w") as index_file:
         index_file.create_dataset(
             "doc_ids", data=[b"doc-a", b"doc-b"]
@@ -80,8 +78,6 @@ def test_turboquant_queries_with_rotated_binary_vectors(tmp_path):
             str(index_path),
             "--port",
             "18766",
-            "--dimensions",
-            "4",
         ],
         cwd=tmp_path,
         stdout=subprocess.PIPE,

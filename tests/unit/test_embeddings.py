@@ -35,7 +35,9 @@ def test_embed_corpus_returns_ground_truth_and_embeddings(
     result = embed_corpus(corpus, judgments, dataset_name="test")
 
     assert result[0] == {"query-1": ["doc-1"]}
-    np.testing.assert_array_equal(result[1], np.array([[0.1, 0.2]]))
+    np.testing.assert_array_equal(
+        result[1], np.array([[0.1, 0.2]], dtype=np.float32)
+    )
     mock_load_or_create_embeddings.assert_called_once()
     mock_ground_truth.assert_called_once()
     assert mock_load_or_create_embeddings.call_args.kwargs["model_name"] == (

@@ -81,7 +81,7 @@ def corpus_embedding_artifacts(
         top_k=top_k,
         show_progress=show_progress,
     )
-    return np.asarray(embeddings), rankings
+    return np.asarray(embeddings, dtype=np.float32), rankings
 
 
 def ground_truth(
@@ -209,7 +209,7 @@ def _query_embeddings(
     signature = _query_signature(queries, dataset_name, model_name)
     cache_path = _cache_dir() / f"query_embeddings_{signature}.npy"
     if cache_path.exists():
-        return np.load(cache_path)
+        return np.load(cache_path).astype(np.float32, copy=False)
 
     model: Any = load_model(model_name, device=device)
     query_texts = [str(query) for query in queries["query"]]
@@ -218,7 +218,7 @@ def _query_embeddings(
         show_progress_bar=show_progress,
         convert_to_numpy=True,
     )
-    embeddings = np.asarray(embeddings)
+    embeddings = np.asarray(embeddings, dtype=np.float32)
     np.save(cache_path, embeddings)
     return embeddings
 

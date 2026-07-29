@@ -15,9 +15,9 @@ def _strings(values: Iterable[object]) -> np.ndarray:
 
 
 def write_index(path: Path, doc_ids, vectors: np.ndarray) -> None:
-    """Write document IDs and vectors without converting the vector dtype."""
+    """Write document IDs and float32 vectors."""
     doc_ids = list(doc_ids)
-    vectors = np.asarray(vectors)
+    vectors = np.asarray(vectors, dtype=np.float32)
     if vectors.ndim != 2 or len(doc_ids) != len(vectors):
         raise ValueError("Document IDs and vectors must have the same number of rows")
 
@@ -34,7 +34,7 @@ def write_queries(
 ) -> None:
     """Write query vectors and ranked document IDs in query/rank order."""
     query_ids = [str(query_id) for query_id in query_ids]
-    query_vectors = np.asarray(query_vectors)
+    query_vectors = np.asarray(query_vectors, dtype=np.float32)
     if query_vectors.ndim != 2 or len(query_ids) != len(query_vectors):
         raise ValueError("Query IDs and vectors must have the same number of rows")
 
@@ -57,7 +57,7 @@ def read_index(path: Path) -> tuple[list[str], np.ndarray]:
         doc_id_dataset = cast(Any, index_file["doc_ids"])
         vector_dataset = cast(Any, index_file["vectors"])
         doc_ids = [_decode(value) for value in doc_id_dataset[:]]
-        vectors = np.asarray(vector_dataset[:])
+        vectors = np.asarray(vector_dataset[:], dtype=np.float32)
     return doc_ids, vectors
 
 
@@ -79,7 +79,7 @@ def read_queries(path: Path) -> tuple[list[str], np.ndarray, dict[str, list[str]
         vector_dataset = cast(Any, queries_file["vectors"])
         ranked_id_dataset = cast(Any, queries_file["ground_truth"])
         query_ids = [_decode(value) for value in query_id_dataset[:]]
-        vectors = np.asarray(vector_dataset[:])
+        vectors = np.asarray(vector_dataset[:], dtype=np.float32)
         ranked_ids = ranked_id_dataset[:]
 
     ground_truth = {

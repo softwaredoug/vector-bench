@@ -44,7 +44,7 @@ def load_queries(
     query_ids, query_vectors, ground_truth = read_queries(queries_path)
     if not query_ids:
         raise ValueError("Queries file must contain at least one query")
-    return query_ids, np.asarray(query_vectors), ground_truth
+    return query_ids, np.asarray(query_vectors, dtype=np.float32), ground_truth
 
 
 if __name__ == "__main__":

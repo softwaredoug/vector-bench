@@ -10,35 +10,23 @@ from tqdm import tqdm
 from .serve import MAX_TOP_K, serve
 
 
-# The benchmark provides full-size embeddings, but this demo intentionally
-# uses only a small prefix so the search implementation stays straightforward.
-DEFAULT_DIMENSIONS = 60
-
-
 @dataclass
 class VectorIndex:
     """The in-memory document IDs and vectors used by the search server."""
 
     doc_ids: list[str]
     doc_vectors: np.ndarray
-    dimensions: int
 
     @staticmethod
     def index(
         doc_ids: h5py.Dataset,
         vectors: h5py.Dataset,
-        dimensions: int = DEFAULT_DIMENSIONS,
     ) -> "VectorIndex":
         """Build an index from original document vectors."""
-        if dimensions <= 0:
-            raise ValueError("dimensions must be greater than zero")
 
         rows, orig_dims = vectors.shape
 
-        if orig_dims < dimensions:
-            raise ValueError(f"vectors must contain at least {dimensions} dimensions")
-
-        index = np.empty((rows, dimensions), dtype=np.float64)
+        index = np.empty((rows, orig_dims), dtype=np.float32)
         index_doc_ids = []
 
         for doc_id, vector in tqdm(
@@ -47,23 +35,24 @@ class VectorIndex:
             index_doc_ids.append(
                 doc_id.decode() if isinstance(doc_id, bytes) else str(doc_id)
             )
-            index[len(index_doc_ids) - 1] = vector[:dimensions]
+            index[len(index_doc_ids) - 1] = vector.astype(np.float32)
 
         return VectorIndex(
             index_doc_ids,
             doc_vectors=index,
-            dimensions=dimensions,
         )
 
     def query(self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K):
         """Return ranked document IDs and scores for one query vector."""
-        if len(query_vector) < self.dimensions:
-            raise ValueError(
-                f"Query vector must contain at least {self.dimensions} dimensions"
-            )
 
-        scores = self.doc_vectors @ query_vector[: self.dimensions]
-        ranked_indexes = np.argsort(-scores, kind="stable")
+        scores = self.doc_vectors @ query_vector.astype(np.float32, copy=False)
+        if top_k is not None and 0 < top_k < len(scores):
+            ranked_indexes = np.argpartition(scores, -top_k)[-top_k:]
+            ranked_indexes = ranked_indexes[
+                np.argsort(-scores[ranked_indexes], kind="stable")
+            ]
+        else:
+            ranked_indexes = np.argsort(-scores, kind="stable")
         if top_k is not None:
             ranked_indexes = ranked_indexes[:top_k]
         return [

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import sys
+import os
 
 import h5py
 import numpy as np
@@ -15,7 +16,7 @@ from .serve import MAX_TOP_K, serve
 DEFAULT_DIMENSIONS = 60
 
 # Number of samples to PCA
-NUM_SAMPLES = 100_000
+DEFAULT_NUM_SAMPLES = 100_000
 
 
 def pca(X: np.ndarray, n_components: int) -> tuple[np.ndarray, np.ndarray]:
@@ -24,7 +25,7 @@ def pca(X: np.ndarray, n_components: int) -> tuple[np.ndarray, np.ndarray]:
     centered = X - mean
 
     # How each dimension varies with every other dimension
-    covariance = np.cov(centered, rowvar=False)
+    covariance = np.cov(centered, rowvar=False).astype(np.float32)
     eigenvalues, eigenvectors = np.linalg.eigh(covariance)
     order = np.argsort(eigenvalues)[::-1]
     eigenvalues = eigenvalues[order]
@@ -47,9 +48,10 @@ class PCAVectorIndex:
     def index(
         doc_ids: h5py.Dataset,
         vectors: h5py.Dataset,
-        dimensions: int = DEFAULT_DIMENSIONS,
     ) -> "PCAVectorIndex":
         """Build an index from original document vectors."""
+        dimensions = int(os.getenv("PCA_DIMENSIONS", DEFAULT_DIMENSIONS))
+        num_samples = int(os.getenv("PCA_NUM_SAMPLES", DEFAULT_NUM_SAMPLES))
         if dimensions <= 0:
             raise ValueError("dimensions must be greater than zero")
 
@@ -58,10 +60,10 @@ class PCAVectorIndex:
         if orig_dims < dimensions:
             raise ValueError(f"vectors must contain at least {dimensions} dimensions")
 
-        pca_matrix = vectors[:NUM_SAMPLES]
+        pca_matrix = vectors[:num_samples]
         pca_eigens, means = pca(pca_matrix, dimensions)
 
-        pca_index = np.empty((rows, dimensions), dtype=np.float64)
+        pca_index = np.empty((rows, dimensions), dtype=np.float32)
         index_doc_ids = []
 
         for doc_id, vector in tqdm(

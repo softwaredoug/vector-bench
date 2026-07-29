@@ -19,13 +19,10 @@ MAX_TOP_K = 50
 class Index(Protocol):
     """Interface required by the standalone search server."""
 
-    dimensions: int
-
     @staticmethod
     def index(
         doc_ids: h5py.Dataset,
         vectors: h5py.Dataset,
-        dimensions: int,
     ) -> "Index":
         ...
 
@@ -49,17 +46,16 @@ def datasets(path: Path) -> Generator[tuple[h5py.Dataset, h5py.Dataset], None, N
 
 
 def load_index(
-    index_type: type[Index], index_path: Path, dimensions: int
+    index_type: type[Index], index_path: Path
 ) -> Index:
     """Load HDF5 data and build an index using the supplied class."""
     with datasets(index_path) as (doc_ids, vectors):
-        return index_type.index(doc_ids, vectors, dimensions=dimensions)
+        return index_type.index(doc_ids, vectors)
 
 
 def test_index(
     index_type: type[Index],
     index_path: Path,
-    dimensions: int,
     index_size: int,
 ) -> None:
     """Continuously query the index with randomly selected corpus vectors."""
@@ -67,7 +63,7 @@ def test_index(
         doc_ids = cast(h5py.Dataset, doc_ids[:index_size])
         vectors = cast(h5py.Dataset, vectors[:index_size])
 
-        index = index_type.index(doc_ids, vectors, dimensions=dimensions)
+        index = index_type.index(doc_ids, vectors)
         vectors_by_doc_id = {
             (doc_id.decode() if isinstance(doc_id, bytes) else str(doc_id)): vector
             for doc_id, vector in zip(doc_ids, vectors)
@@ -123,16 +119,11 @@ def make_query_handler(index: Index):
                 query_id = fields["query_id"][0]
                 query_vector = np.asarray(
                     [float(value) for value in fields["vector"][0].split(",")],
-                    dtype=np.float64,
+                    dtype=np.float32,
                 )
                 top_k = min(int(fields.get("top_k", [MAX_TOP_K])[0]), MAX_TOP_K)
                 if top_k <= 0:
                     raise ValueError("top_k must be greater than zero")
-                if len(query_vector) < index.dimensions:
-                    raise ValueError(
-                        "Query vector must contain at least "
-                        f"{index.dimensions} dimensions"
-                    )
             except (KeyError, TypeError, ValueError) as error:
                 self.send_error(400, str(error))
                 return
@@ -157,7 +148,6 @@ def serve(index_type: type[Index], argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="naive-vector-search")
     parser.add_argument("--index", type=Path, required=True)
     parser.add_argument("--port", type=int)
-    parser.add_argument("--dimensions", type=int, default=60)
     parser.add_argument(
         "--test-index-size",
         type=int,
@@ -171,14 +161,13 @@ def serve(index_type: type[Index], argv: Sequence[str] | None = None) -> None:
         test_index(
             index_type,
             args.index,
-            dimensions=args.dimensions,
             index_size=args.test_index_size,
         )
         return
     if args.port is None:
         parser.error("the following arguments are required: --port")
 
-    index = load_index(index_type, args.index, dimensions=args.dimensions)
+    index = load_index(index_type, args.index)
     print("Inedx loaded")
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_query_handler(index))
 

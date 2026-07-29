@@ -8,7 +8,7 @@ from exps.isotropy import graph_coords, graph_eigen
 def test_graph_annotates_every_25th_eigenvalue(tmp_path):
     axis = Mock()
     figure = Mock()
-    vectors = np.eye(50, dtype=np.float64)
+    vectors = np.eye(50, dtype=np.float32)
     with patch("exps.isotropy.plt.subplots", return_value=(figure, axis)):
         graph_eigen(vectors, tmp_path / "graph.png")
 
@@ -24,7 +24,7 @@ def test_graph_annotates_every_25th_eigenvalue(tmp_path):
 def test_graph_coords_labels_min_max_and_uses_y_limits(tmp_path):
     axis = Mock()
     figure = Mock()
-    vectors = np.array([[0, 0], [1, 2], [2, 4]], dtype=np.float64)
+    vectors = np.array([[0, 0], [1, 2], [2, 4]], dtype=np.float32)
     with patch("exps.isotropy.plt.subplots", return_value=(figure, axis)):
         graph_coords(vectors, tmp_path / "graph.png", y_limits=(1.0, 5.0))
 

@@ -13,6 +13,11 @@ from .serve import MAX_TOP_K, serve
 NUM_SAMPLES = 10000
 
 
+def random_projection_matrix(dims: int, num_projections: int) -> np.ndarray:
+    """Generate one random projection vector for each output dimension."""
+    return np.random.randn(dims, num_projections).astype(np.float32)
+
+
 @dataclass
 class BinaryQuantVectorIndex:
     """The in-memory document IDs and vectors used by the search server."""
@@ -20,30 +25,29 @@ class BinaryQuantVectorIndex:
     doc_ids: list[str]
     packed_index: np.ndarray
     means: np.ndarray
-    dimensions: int
+    projections: np.ndarray
 
     @staticmethod
     def index(
         doc_ids: h5py.Dataset,
         vectors: h5py.Dataset,
-        dimensions: int = 0,
     ) -> "BinaryQuantVectorIndex":
         """Build an index from original document vectors."""
         rows, orig_dims = vectors.shape
 
-        if orig_dims < dimensions:
-            raise ValueError(f"vectors must contain at least {dimensions} dimensions")
-
         means = np.asarray(vectors).mean(axis=0)
+        projections = random_projection_matrix(orig_dims, num_projections=orig_dims * 16)
         all_packed = []
         index_doc_ids = []
 
         for doc_id, vector in tqdm(
             zip(doc_ids, vectors), file=sys.stdout, total=rows, desc="Indexing", unit="doc"
         ):
-            transformed = (vector - means) >= 0
-            transformed = transformed.astype(np.uint8)
-            packed = np.packbits(transformed)
+            centered = vector - means
+            bits = np.concatenate(
+                [centered >= 0, (centered @ projections) >= 0]
+            )
+            packed = np.packbits(bits)
             index_doc_ids.append(
                 doc_id.decode() if isinstance(doc_id, bytes) else str(doc_id)
             )
@@ -54,13 +58,15 @@ class BinaryQuantVectorIndex:
             index_doc_ids,
             packed_index=all_packed,
             means=means,
-            dimensions=dimensions
+            projections=projections,
         )
 
     def query(self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K):
         """Return ranked document IDs and scores for one query vector."""
-        transformed = (query_vector[: len(self.means)] - self.means) >= 0
-        packed = np.packbits(transformed.astype(np.uint8))
+        centered = query_vector[: len(self.means)] - self.means
+        packed = np.packbits(
+            np.concatenate([centered >= 0, centered @ self.projections >= 0])
+        )
         # XOR + hamming
         xord = np.bitwise_xor(self.packed_index, packed)
         scores = np.bitwise_count(xord).sum(axis=1)  # count the number of differing bits

@@ -26,14 +26,43 @@ NUM_SAMPLES = 10_000
 def random_rotation(dims: int) -> np.ndarray:
     """Perform Principal Component Analysis to reduce the dimensions of the vector."""
     # Generate a random orthogonal matrix using QR decomposition
-    random_matrix = np.random.randn(dims, dims)
+    random_matrix = np.random.randn(dims, dims).astype(np.float32)
     q, _ = np.linalg.qr(random_matrix)
     return q
+
+
+def random_projection_matrix(dims: int) -> np.ndarray:
+    """Generate one random projection vector for each output dimension."""
+    return np.random.randn(dims, dims).astype(np.float32)
 
 
 class ProductQuantization:
 
     codebooks: list[np.ndarray]
+
+
+def print_min_max(vectors):
+    orig_dims = vectors.shape[1]
+    print("dim, min, max, perc_gte_0, perc_gte_mean")
+    gte0s = []
+    gtemeans = []
+    for dim in range(0, orig_dims, 10):
+        num_gte_0 = np.sum(vectors[:, dim] > 0)
+        num_lt_0 = np.sum(vectors[:, dim] < 0)
+        perc_gte_0 = num_gte_0 / (num_gte_0 + num_lt_0)
+        mean = np.mean(vectors[:, dim])
+        num_gte_mean = np.sum(vectors[:, dim] > mean)
+        num_lt_mean = np.sum(vectors[:, dim] < mean)
+        perc_gte_mean = num_gte_mean / (num_gte_mean + num_lt_mean)
+        gte0s.append(perc_gte_0)
+        gtemeans.append(perc_gte_mean)
+        print(dim, vectors[:, dim].min(), vectors[:, dim].max(), perc_gte_0, perc_gte_mean)
+    mean_gte0 = np.mean(gte0s)
+    mean_gtemean = np.mean(gtemeans)
+    var_gte0 = np.var(gte0s)
+    var_gtemean = np.var(gtemeans)
+    print("mean_gte0", mean_gte0, "mean_gtemean", mean_gtemean)
+    print("var_gte0", var_gte0, "var_gtemean", var_gtemean)
 
 
 @dataclass
@@ -44,6 +73,7 @@ class TurboQuantIndex:
     packed_index: np.ndarray
     means: np.ndarray
     rotation: np.ndarray
+    projections: np.ndarray
     dimensions: int
     graph_isotropy: ClassVar[bool] = False
 
@@ -51,7 +81,6 @@ class TurboQuantIndex:
     def index(
         doc_ids: h5py.Dataset,
         vectors: h5py.Dataset,
-        dimensions: int = DEFAULT_DIMENSIONS,
     ) -> "TurboQuantIndex":
         """Build an index from original document vectors."""
         rows, orig_dims = vectors.shape
@@ -61,10 +90,15 @@ class TurboQuantIndex:
             raise ValueError(f"vectors must contain at least {dimensions} dimensions")
 
         rotation = random_rotation(orig_dims)
+        projections = random_projection_matrix(orig_dims)
 
         if TurboQuantIndex.graph_isotropy:
             sample = vectors[: min(NUM_SAMPLES, rows)]
+            print("orig")
+            print_min_max(sample)
             rotated_sample = sample @ rotation
+            print("rot")
+            print_min_max(rotated_sample)
             coordinate_values = np.concatenate(
                 [coordinate_variances(sample), coordinate_variances(rotated_sample)]
             )
@@ -78,8 +112,8 @@ class TurboQuantIndex:
             )
             graph_eigen(rotated_sample, "graph_eigen_after.png")
 
-        rotated_vectors = np.empty((rows, orig_dims), dtype=np.float64)
-        means = np.zeros(orig_dims, dtype=np.float64)
+        rotated_vectors = np.empty((rows, orig_dims), dtype=np.float32)
+        means = np.zeros(orig_dims, dtype=np.float32)
         index_doc_ids = []
 
         for row, (doc_id, vector) in enumerate(tqdm(
@@ -93,13 +127,22 @@ class TurboQuantIndex:
             )
 
         means /= rows
-        packed_index = np.packbits(rotated_vectors >= means, axis=1)
+        packed_index = np.empty(
+            (rows, (2 * orig_dims + 7) // 8), dtype=np.uint8
+        )
+        for row, rotated_vector in enumerate(rotated_vectors):
+            centered = rotated_vector - means
+            bits = np.concatenate(
+                [centered >= 0, centered @ projections >= 0]
+            )
+            packed_index[row] = np.packbits(bits)
 
         return TurboQuantIndex(
             index_doc_ids,
             packed_index=packed_index,
             means=means,
             rotation=rotation,
+            projections=projections,
             dimensions=dimensions
         )
 
@@ -111,7 +154,9 @@ class TurboQuantIndex:
             )
 
         transformed = query_vector[: len(self.means)] @ self.rotation - self.means
-        packed_query = np.packbits(transformed >= 0)
+        packed_query = np.packbits(
+            np.concatenate([transformed >= 0, transformed @ self.projections >= 0])
+        )
 
         distances = np.bitwise_count(
             np.bitwise_xor(self.packed_index, packed_query)
