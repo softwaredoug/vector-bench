@@ -48,8 +48,9 @@ class VectorIndex:
         scores = self.doc_vectors @ query_vector.astype(np.float32, copy=False)
         if top_k is not None and 0 < top_k < len(scores):
             ranked_indexes = np.argpartition(scores, -top_k)[-top_k:]
+            candidate_scores = scores[ranked_indexes]
             ranked_indexes = ranked_indexes[
-                np.argsort(-scores[ranked_indexes], kind="stable")
+                np.argsort(-candidate_scores, kind="stable")
             ]
         else:
             ranked_indexes = np.argsort(-scores, kind="stable")
