@@ -52,10 +52,11 @@ loads the index, repeatedly searches a randomly selected corpus vector, and
 stops with Ctrl+C:
 
 ```
-naive-vector-search --index corpus.h5 --dimensions 60 --test-index-size 1000
+naive-vector-search --index corpus.h5 --dimensions 60 --test --index-size 1000
 ```
 
-`--test-index-size N` indexes only the first `N` corpus vectors while debugging.
+`--test` enables the non-HTTP test loop. `--index-size N` indexes only the first
+`N` corpus vectors and is available with or without `--test`.
 Each result includes the index score and the true full-vector cosine similarity.
 
 The option is available to scripts in `exps/` that use the shared launcher.

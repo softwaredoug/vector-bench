@@ -18,6 +18,25 @@ def test_launch_student_handles_buffered_startup_output(tmp_path):
         pass
 
 
+def test_launch_student_drains_output_after_ready(tmp_path):
+    with launch_student(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys, time; "
+                "print('READY', flush=True); "
+                "sys.stderr.write('x' * 200000); sys.stderr.flush(); "
+                "print('DONE', flush=True)"
+            ),
+        ],
+        tmp_path / "index.h5",
+        ready_timeout=1,
+    ) as student:
+        student.process.wait(timeout=1)
+        assert student.process.returncode == 0
+
+
 def test_benchmark_main_replays_prepared_files(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("VECTOR_BENCH_DATA_DIR", str(tmp_path / "cache"))
     index_path = tmp_path / "index.h5"

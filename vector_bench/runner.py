@@ -6,6 +6,7 @@ import os
 import selectors
 import socket
 import subprocess
+import threading
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -72,6 +73,8 @@ def launch_student(
 
     try:
         _wait_for_ready(process, ready_timeout)
+        _start_output_drainer(process.stdout)
+        _start_output_drainer(process.stderr)
     except Exception:
         _stop_process(process)
         raise
@@ -123,3 +126,21 @@ def _stop_process(process: subprocess.Popen[str]) -> None:
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait(timeout=5)
+
+
+def _start_output_drainer(stream) -> None:
+    """Consume child output after startup so its pipes cannot fill."""
+    if stream is None:
+        return
+    thread = threading.Thread(target=_drain_output, args=(stream,), daemon=True)
+    thread.start()
+
+
+def _drain_output(stream) -> None:
+    """Read and discard output from a running child process."""
+    while True:
+        try:
+            if not os.read(stream.fileno(), 4096):
+                return
+        except OSError:
+            return

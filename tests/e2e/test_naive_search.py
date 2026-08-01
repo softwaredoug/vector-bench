@@ -79,6 +79,53 @@ def test_naive_search_indexes_and_queries_embeddings(index_path):
         process.wait(timeout=5)
 
 
+def test_naive_search_index_size_truncates_http_index(index_path):
+    port = 18766
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "from exps.naive import main; main()",
+            "--index",
+            str(index_path),
+            "--port",
+            str(port),
+            "--index-size",
+            "2",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    try:
+        assert process.stdout is not None
+        assert any(
+            line.strip() == "READY"
+            for line in iter(process.stdout.readline, "")
+        )
+
+        request = Request(
+            f"http://127.0.0.1:{port}/query",
+            data=urlencode(
+                {
+                    "query_id": "q1",
+                    "vector": ",".join(["0"] * 19 + ["1"]),
+                    "top_k": "50",
+                }
+            ).encode(),
+            method="POST",
+        )
+        with urlopen(request) as response:
+            result = response.read().decode().splitlines()
+
+        assert result
+        assert all("doc-c" not in line for line in result)
+    finally:
+        process.terminate()
+        process.wait(timeout=5)
+
+
 def test_naive_search_test_mode_queries_corpus_until_interrupted(index_path):
     process = subprocess.Popen(
         [
@@ -87,7 +134,8 @@ def test_naive_search_test_mode_queries_corpus_until_interrupted(index_path):
             "from exps.naive import main; main()",
             "--index",
             str(index_path),
-            "--test-index-size",
+            "--test",
+            "--index-size",
             "2",
         ],
         stdout=subprocess.PIPE,

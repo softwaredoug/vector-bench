@@ -46,22 +46,26 @@ def datasets(path: Path) -> Generator[tuple[h5py.Dataset, h5py.Dataset], None, N
 
 
 def load_index(
-    index_type: type[Index], index_path: Path
+    index_type: type[Index], index_path: Path, index_size: int | None = None
 ) -> Index:
     """Load HDF5 data and build an index using the supplied class."""
     with datasets(index_path) as (doc_ids, vectors):
+        if index_size is not None:
+            doc_ids = cast(h5py.Dataset, doc_ids[:index_size])
+            vectors = cast(h5py.Dataset, vectors[:index_size])
         return index_type.index(doc_ids, vectors)
 
 
 def test_index(
     index_type: type[Index],
     index_path: Path,
-    index_size: int,
+    index_size: int | None = None,
 ) -> None:
     """Continuously query the index with randomly selected corpus vectors."""
     with datasets(index_path) as (doc_ids, vectors):
-        doc_ids = cast(h5py.Dataset, doc_ids[:index_size])
-        vectors = cast(h5py.Dataset, vectors[:index_size])
+        if index_size is not None:
+            doc_ids = cast(h5py.Dataset, doc_ids[:index_size])
+            vectors = cast(h5py.Dataset, vectors[:index_size])
 
         index = index_type.index(doc_ids, vectors)
         vectors_by_doc_id = {
@@ -149,25 +153,30 @@ def serve(index_type: type[Index], argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--index", type=Path, required=True)
     parser.add_argument("--port", type=int)
     parser.add_argument(
-        "--test-index-size",
+        "--index-size",
         type=int,
-        help="continuously query random vectors from an index of this size",
+        help="index only the first N documents",
+    )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="continuously query random vectors instead of starting an HTTP server",
     )
     args = parser.parse_args(argv)
 
-    if args.test_index_size is not None:
-        if args.test_index_size <= 0:
-            parser.error("--test-index-size must be greater than zero")
+    if args.index_size is not None and args.index_size <= 0:
+        parser.error("--index-size must be greater than zero")
+    if args.test:
         test_index(
             index_type,
             args.index,
-            index_size=args.test_index_size,
+            index_size=args.index_size,
         )
         return
     if args.port is None:
         parser.error("the following arguments are required: --port")
 
-    index = load_index(index_type, args.index)
+    index = load_index(index_type, args.index, index_size=args.index_size)
     print("Inedx loaded")
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_query_handler(index))
 
