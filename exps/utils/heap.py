@@ -1,15 +1,19 @@
 import heapq
 from typing import Any, Iterator
+import numpy as np
+
+
+Number = np.float32
 
 
 class MaxHeap:
     """Maintain top N highest scoring items in heap, useful for top N search results."""
-    heap: list[tuple[float, Any]]
+    heap: list[tuple[Number, Any]]
     max_size: int
 
     def __init__(self,
                  max_size: int,
-                 heap: list[tuple[float, Any]] | None = None) -> None:
+                 heap: list[tuple[Number, Any]] | None = None) -> None:
         if heap is None:
             self.heap = []
         else:
@@ -18,7 +22,7 @@ class MaxHeap:
             self.heap = heap
         self.max_size = max_size
 
-    def pushpop(self, item: tuple[float, Any]) -> tuple[float, Any] | None:
+    def pushpop(self, item: tuple[Number, Any]) -> tuple[Number, Any] | None:
         """Push an item onto the heap and pop the smallest item if the heap exceeds max_size."""
         if len(self.heap) < self.max_size:
             heapq.heappush(self.heap, item)
@@ -27,11 +31,11 @@ class MaxHeap:
             return popped
 
     @property
-    def sorted(self) -> list[tuple[float, Any]]:
+    def sorted(self) -> list[tuple[Number, Any]]:
         """Return the items in the heap sorted by score in descending order."""
         return sorted(self.heap, key=lambda x: x[0], reverse=True)
 
-    def items(self) -> Iterator[tuple[float, Any]]:
+    def items(self) -> Iterator[tuple[Number, Any]]:
         """Return an iterator over the items in the heap."""
         return iter(self.heap)
 
@@ -41,7 +45,7 @@ class MaxHeap:
     def __bool__(self) -> bool:
         return bool(self.heap)
 
-    def __iter__(self) -> Iterator[tuple[float, Any]]:
+    def __iter__(self) -> Iterator[tuple[Number, Any]]:
         return iter(self.heap)
 
     def __repr__(self) -> str:
@@ -50,8 +54,8 @@ class MaxHeap:
     def __str__(self) -> str:
         return f"MaxHeap(max_size={self.max_size}, items={self.sorted})"
 
-    def __contains__(self, item: tuple[float, Any]) -> bool:
+    def __contains__(self, item: tuple[Number, Any]) -> bool:
         return item in self.heap
 
-    def __getitem__(self, index: int) -> tuple[float, Any]:
+    def __getitem__(self, index: int) -> tuple[Number, Any]:
         return self.heap[index]

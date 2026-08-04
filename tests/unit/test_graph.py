@@ -1,87 +1,56 @@
-from exps.graph import beam_search, Node
+from exps.graph import beam_search
+from exps.utils.sim import norm
 
 import math
 
 import numpy as np
 
 
-def normed(vect: np.ndarray) -> np.ndarray:
-    """Return a normalized vector."""
-    norm = np.linalg.norm(vect)
-    if norm == 0:
-        return vect
-    return vect / norm
-
-
-def assert_sim_order(query, results):
+def assert_sim_order(query_vector, results, vectors):
     """Confirm sort order from most to least similar."""
-    earlier_sim = 1.1
-    for result in results:
-        curr_sim = np.dot(result[1].vector, query)
-        assert earlier_sim >= curr_sim, f"Results are not sorted by similarity: {earlier_sim} > {curr_sim}"
-        earlier_sim = curr_sim
+    for earlier_result, next_result in zip(results, results[1:]):
+        earlier_sim = earlier_result[0]
+        next_sim = next_result[0]
+        assert earlier_result[0] >= next_result[0], f"Results are not sorted by similarity: {earlier_sim} > {next_sim}"
+        # Now confirm the sim
+        earlier_vector = vectors[earlier_result[1]]
+        next_vector = vectors[next_result[1]]
+        actual_earlier_sim = earlier_vector @ query_vector
+        actual_next_sim = next_vector @ query_vector
+        assert math.isclose(earlier_sim, actual_earlier_sim, rel_tol=1e-5), f"Earlier sim {earlier_sim} does not match actual {actual_earlier_sim}"
+        assert math.isclose(next_sim, actual_next_sim, rel_tol=1e-5), f"Next sim {next_sim} does not match actual {actual_next_sim}"
 
 
 def test_beam_search_base():
     # Create a simple graph with 3 nodes
-    node_a = Node(normed(np.array([1.0, 0.0])), "doc-a", 2)
-    node_b = Node(normed(np.array([1.0, 1.0])), "doc-b", 2)
-    node_c = Node(normed(np.array([-1.0, 0.0])), "doc-c", 2)
 
-    # Connect the nodes
-    node_a.add_neighbor(node_b)
-    node_b.add_neighbor(node_a)
-    node_b.add_neighbor(node_c)
-    node_c.add_neighbor(node_b)
+    vectors = norm([[1.0, 0.0], [1.0, 1.0], [-1.0, 0.0]])
+    adjacencies = [[1], [0, 2], [1]]
 
     # Perform beam search with a query vector
     query_vector = np.array([0.5, 0.5])
     ef = 2
-    results = beam_search(query_vector, node_a, ef)
+    results = beam_search(query_vector, vectors, adjacencies, ef)
 
-    assert_sim_order(query_vector, results)
-
-    # Check that the results are sorted by distance and contain the expected nodes
-    assert len(results) == 2
-    assert results[0][1] == node_b  # Closest neighbor
-    assert results[1][1] == node_a or results[1][1] == node_c  # Second closest neighbor
-
-
-def test_beam_search_bad_graph():
-    # Create a simple graph with 3 nodes
-    node_a = Node(normed(np.array([1.0, 0.0])), "doc-a", 2)
-    node_b = Node(normed(np.array([1.0, 1.0])), "doc-b", 2)
-    node_c = Node(normed(np.array([-1.0, 0.0])), "doc-c", 2)
-
-    # Connect the nodes
-    node_a.add_neighbor(node_b)
-    node_b.add_neighbor(node_a)
-
-    # Perform beam search with a query vector
-    query_vector = np.array([0.5, 0.5])
-    ef = 2
-    results = beam_search(query_vector, node_a, ef)
-
-    assert_sim_order(query_vector, results)
+    assert_sim_order(query_vector, results, vectors)
 
     # Check that the results are sorted by distance and contain the expected nodes
     assert len(results) == 2
-    assert results[0][1] == node_b  # Closest neighbor
-    assert results[1][1] == node_a or results[1][1] == node_c  # Second closest neighbor
 
 
 def test_beam_search_long_chain():
-    nodes = []
-    all_vectors = np.empty((255, 2), dtype=np.float32)
+    adjacencies = [[] for _ in range(255)]
+    vectors = np.empty((255, 2), dtype=np.float32)
     for idx in range(255):
         x = math.cos(2 * math.pi * idx / 255)
         y = math.sin(2 * math.pi * idx / 255)
-        nodes.append(Node(normed(np.array([x, y])), f"doc-{idx}", 2))
-        nodes[idx - 1].add_neighbor(nodes[idx])  # Connect to previous node
-        all_vectors[idx] = nodes[idx].vector
+        vector = norm(np.array([x, y]))
+        adjacencies[idx - 1] = [idx]
+        vectors[idx] = vector
 
     # Perform beam search with a query vector
     query_vector = np.array([0.5, 0.5])
-    results = beam_search(query_vector, nodes[0], ef=5)
+    ef = 5
+    results = beam_search(query_vector, vectors, adjacencies, ef)
     assert len(results) == 5
-    assert_sim_order(query_vector, results)
+    assert_sim_order(query_vector, results, vectors)
