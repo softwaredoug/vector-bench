@@ -82,4 +82,5 @@ def test_beam_search_long_chain():
     # Perform beam search with a query vector
     query_vector = np.array([0.5, 0.5])
     results = beam_search(query_vector, nodes[0], ef=5)
+    assert len(results) == 5
     assert_sim_order(query_vector, results)

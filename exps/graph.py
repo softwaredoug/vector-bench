@@ -60,10 +60,10 @@ def beam_search(query: np.ndarray, root: Node,
     exploration_frontier = [(cos_dist(query, root.vector), root)]
     visited = set()
 
-    # Look until exploration frontier does not change
-    last_exploration_frontier = []
+    adding = True
 
-    while last_exploration_frontier != exploration_frontier:
+    while adding:
+        adding = False
         for _, node in exploration_frontier:
             for neighbor in node.nodes:
                 if neighbor.doc_id in visited:
@@ -73,9 +73,10 @@ def beam_search(query: np.ndarray, root: Node,
                 heapq.heappush(exploration_frontier, (dist_to_query, neighbor))
                 print(f"Tracking {len(exploration_frontier)} neighbors for node {neighbor.doc_id}")
                 visited.add(neighbor.doc_id)
+                adding = True
         # Truncate to ef closest
+        print("Truncating...")
         exploration_frontier = heapq.nsmallest(ef, exploration_frontier)
-        last_exploration_frontier = exploration_frontier.copy()
 
     return exploration_frontier
 
