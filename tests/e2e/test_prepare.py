@@ -61,3 +61,12 @@ def test_prepare_main_writes_index_and_queries(
             -(ranked_vectors @ query_vectors[query_index]), kind="stable"
         )
         assert [ranked_doc_ids[index] for index in expected_order] == ranked_doc_ids
+
+
+def test_wands_dataset_is_available():
+    corpus, judgments = get_dataset("wands")
+
+    assert len(corpus) > 40_000
+    assert len(judgments) > 200_000
+    assert {"doc_id", "title", "description"}.issubset(corpus.columns)
+    assert {"query_id", "doc_id"}.issubset(judgments.columns)

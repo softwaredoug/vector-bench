@@ -70,10 +70,12 @@ Why? To let us distribute index / ground truth with training without the student
 keeping embeddings in memory during evaluation (hopefully only the student's own script needs to do this)
 
 ```
-prepare --dataset msmarco --index-out corpus.h5 --queries-out queries.h5 --num-queries <N>
+prepare --dataset wands --index-out corpus.h5 --queries-out queries.h5 --num-queries <N>
 ```
 
 This prepares a portable HDF5 corpus of vectors to be indexed by the student's script and HDF5 query ground truth to replay. The project depends on `h5py` for this format.
+
+Available datasets are `dougs_blog_data`, `wands`, and `msmarco`. WANDS is the medium-sized option between the blog dataset and MS MARCO passages.
 
 The index HDF5 file contains:
 
