@@ -16,7 +16,10 @@ DEFAULT_EF_SEARCH = 64  # Size of the dynamic list for the nearest neighbors dur
 def cos_sim(vector1: np.ndarray, vector2: np.ndarray) -> float:
     """Get a distance between two vectors based on cosine similarity, assuming they're normalized."""
     dotted = np.dot(vector1, vector2)
-    assert -1.0 <= dotted <= 1.0, f"Dot product {dotted} is out of range [-1, 1]"
+    assert ((-1.0 <= dotted <= 1.0)
+            or np.isclose(dotted, -1)
+            or np.isclose(dotted, 1.0)), f"Dot product {dotted} is out of range [-1, 1]"
+    dotted = max(-1.0, min(1.0, dotted))  # Clamp to [-1, 1] to avoid numerical issues
     return dotted
 
 
@@ -73,7 +76,6 @@ def beam_search(query: np.ndarray, root: Node,
 
                 dist_to_query = cos_sim(query, neighbor.vector)
                 exploration_frontier.pushpop((dist_to_query, neighbor))
-                print(f"Tracking {len(exploration_frontier)} neighbors for node {neighbor.doc_id}")
                 visited.add(neighbor.doc_id)
                 adding = True
 
@@ -121,7 +123,6 @@ class GraphIndex:
                 new_node = Node(vector.astype(np.float32), doc_id, DEFAULT_M)
                 # Add new node to the graph
                 ef_frontier = beam_search(new_node.vector, root, ef=DEFAULT_EF_CONSTRUCTION)
-                print(f"Found {len(ef_frontier)} neighbors for node {doc_id}")
                 best = select_best_connections(new_node.vector, ef_frontier, DEFAULT_M)
                 for _, candidate in best:
                     new_node.add_neighbor(candidate)
@@ -131,7 +132,9 @@ class GraphIndex:
             root=root
         )
 
-    def query(self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K):
+    def query(
+        self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K
+    ) -> list[tuple[int, str, float]]:
         """Beam search from root to get nearest neighbors."""
         if self.root is None:
             raise ValueError("Graph index is empty. Please index the data first.")
@@ -139,7 +142,11 @@ class GraphIndex:
         if top_k is None or top_k <= 0:
             top_k = MAX_TOP_K
 
-        return beam_search(query_vector, self.root, ef=DEFAULT_EF_SEARCH)
+        top_nodes = beam_search(query_vector, self.root, ef=DEFAULT_EF_SEARCH)
+        results = []
+        for idx, (score, node) in enumerate(top_nodes):
+            results.append((idx, node.doc_id, score))
+        return results
 
 
 def main(argv=None) -> None:

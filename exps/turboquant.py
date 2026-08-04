@@ -146,7 +146,9 @@ class TurboQuantIndex:
             dimensions=dimensions
         )
 
-    def query(self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K):
+    def query(
+        self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K
+    ) -> list[tuple[int, str, float]]:
         """Return ranked document IDs and scores for one query vector."""
         if len(query_vector) < self.dimensions:
             raise ValueError(

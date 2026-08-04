@@ -61,7 +61,9 @@ class BinaryQuantVectorIndex:
             projections=projections,
         )
 
-    def query(self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K):
+    def query(
+        self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K
+    ) -> list[tuple[int, str, float]]:
         """Return ranked document IDs and scores for one query vector."""
         centered = query_vector[: len(self.means)] - self.means
         packed = np.packbits(

@@ -43,3 +43,15 @@ class MaxHeap:
 
     def __iter__(self) -> Iterator[tuple[float, Any]]:
         return iter(self.heap)
+
+    def __repr__(self) -> str:
+        return f"MaxHeap(max_size={self.max_size}, items={self.sorted})"
+
+    def __str__(self) -> str:
+        return f"MaxHeap(max_size={self.max_size}, items={self.sorted})"
+
+    def __contains__(self, item: tuple[float, Any]) -> bool:
+        return item in self.heap
+
+    def __getitem__(self, index: int) -> tuple[float, Any]:
+        return self.heap[index]

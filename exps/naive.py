@@ -42,7 +42,9 @@ class VectorIndex:
             doc_vectors=index,
         )
 
-    def query(self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K):
+    def query(
+        self, query_vector: np.ndarray, top_k: int | None = MAX_TOP_K
+    ) -> list[tuple[int, str, float]]:
         """Return ranked document IDs and scores for one query vector."""
 
         scores = self.doc_vectors @ query_vector.astype(np.float32, copy=False)
