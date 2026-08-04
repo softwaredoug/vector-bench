@@ -1,10 +1,10 @@
-import heapq
 import numpy as np
 from tqdm import tqdm
 import h5py
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from .serve import MAX_TOP_K, serve
+from .utils.heap import MaxHeap
 import sys
 
 
@@ -13,39 +13,40 @@ DEFAULT_EF_CONSTRUCTION = 4  # Size of the dynamic list for the nearest neighbor
 DEFAULT_EF_SEARCH = 64  # Size of the dynamic list for the nearest neighbors during searching
 
 
-def cos_dist(vector1: np.ndarray, vector2: np.ndarray) -> float:
+def cos_sim(vector1: np.ndarray, vector2: np.ndarray) -> float:
     """Get a distance between two vectors based on cosine similarity, assuming they're normalized."""
     dotted = np.dot(vector1, vector2)
     assert -1.0 <= dotted <= 1.0, f"Dot product {dotted} is out of range [-1, 1]"
-    return float(1.0 - np.dot(vector1, vector2))
+    return dotted
 
 
-@dataclass
 class Node:
     vector: np.ndarray
     doc_id: str
-    max_neighbors: int
-    neighbors: list[tuple[float, "Node"]] = field(default_factory=list)
+    neighbors: MaxHeap
+
+    def __init__(self, vector: np.ndarray, doc_id: str, max_neighbors: int = DEFAULT_M):
+        self.vector = vector
+        self.doc_id = doc_id
+        self.neighbors = MaxHeap(max_neighbors)
 
     def add_neighbor(self, node):
-        dist = cos_dist(self.vector, node.vector)
-        heapq.heappush(self.neighbors, (dist, node))
-        if len(self.neighbors) > self.max_neighbors:
-            heapq.heappop(self.neighbors)
+        sim = cos_sim(self.vector, node.vector)
+        self.neighbors.pushpop((sim, node))
 
     @property
     def sims(self):
-        return [np.dot(self.vector, n[1].vector) for n in self.neighbors]
+        neighbor_sims = [float(n[0]) for n in self.neighbors.sorted]
+        return neighbor_sims
 
     @property
     def nodes(self):
-        return [n[1] for n in self.neighbors]
+        return [n[1] for n in self.neighbors.sorted]
 
     def __repr__(self):
-        neighbor_dists = [float(n[0]) for n in self.neighbors]
-        neighbor_sims = [float(np.dot(self.vector, n[1].vector)) for n in self.neighbors]
-        neighbor_docids = [n[1].doc_id for n in self.neighbors]
-        return f"Node({self.doc_id}, dists={neighbor_dists}, sims={neighbor_sims}, doc_ids={neighbor_docids})"
+        neighbor_sims = [float(n[0]) for n in self.neighbors.sorted]
+        neighbor_docids = [n[1].doc_id for n in self.neighbors.sorted]
+        return f"Node({self.doc_id}, sims={neighbor_sims}, doc_ids={neighbor_docids})"
 
     def __eq__(self, other):
         return self.doc_id == other.doc_id
@@ -57,28 +58,26 @@ class Node:
 def beam_search(query: np.ndarray, root: Node,
                 ef: int = DEFAULT_EF_CONSTRUCTION) -> list[tuple[float, Node]]:
 
-    exploration_frontier = [(cos_dist(query, root.vector), root)]
+    exploration_frontier: MaxHeap = MaxHeap(heap=[(cos_sim(query, root.vector), root)],
+                                            max_size=ef)
     visited = set()
 
     adding = True
 
     while adding:
         adding = False
-        for _, node in exploration_frontier:
+        for _, node in exploration_frontier.items():
             for neighbor in node.nodes:
                 if neighbor.doc_id in visited:
                     continue
 
-                dist_to_query = cos_dist(query, neighbor.vector)
-                heapq.heappush(exploration_frontier, (dist_to_query, neighbor))
+                dist_to_query = cos_sim(query, neighbor.vector)
+                exploration_frontier.pushpop((dist_to_query, neighbor))
                 print(f"Tracking {len(exploration_frontier)} neighbors for node {neighbor.doc_id}")
                 visited.add(neighbor.doc_id)
                 adding = True
-        # Truncate to ef closest
-        print("Truncating...")
-        exploration_frontier = heapq.nsmallest(ef, exploration_frontier)
 
-    return exploration_frontier
+    return exploration_frontier.sorted
 
 
 def select_best_connections(query: np.ndarray, ef: list[tuple[float, Node]], m: int):
@@ -88,7 +87,7 @@ def select_best_connections(query: np.ndarray, ef: list[tuple[float, Node]], m: 
         if len(best_neighbors) >= m:
             break
         # Check if candidate is closer than any of the best neighbors
-        if all(cos_dist(candidate.vector, neighbor.vector) > dist for _, neighbor in best_neighbors):
+        if all(cos_sim(candidate.vector, neighbor.vector) > dist for _, neighbor in best_neighbors):
             best_neighbors.append((dist, candidate))
     return best_neighbors
 

@@ -1,7 +1,8 @@
 from exps.graph import beam_search, Node
 
-import numpy as np
 import math
+
+import numpy as np
 
 
 def normed(vect: np.ndarray) -> np.ndarray:
